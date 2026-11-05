@@ -31,10 +31,11 @@ site's URL, for example `["https://proofpay.pages.dev"]`. The start command runs
 `alembic upgrade head` before the server. The service sleeps when idle, so the first
 request after a pause takes 30-60 seconds.
 
-**Site on Cloudflare Pages.** Connect the repo, then set root directory `web`, build
-command `npm run build`, output directory `dist`. Add the variables `VITE_API_URL` (the
-Render URL, no trailing slash), `VITE_PAYPAL_CLIENT_ID` (sandbox client ID) and
-`NODE_VERSION` (22). Variables are baked in at build time, so redeploy after changing them.
+**Site on Cloudflare.** Connect the repo, then set root directory `web`, build
+command `npm run build` and deploy command `npx wrangler deploy`. `web/wrangler.jsonc`
+serves `dist` as a single-page app, so wrangler needs no auto-detection. Add the build
+variables `VITE_API_URL` (the Render URL, no trailing slash), `VITE_PAYPAL_CLIENT_ID`
+(sandbox client ID) and `NODE_VERSION` (22). Variables are baked in at build time, so redeploy after changing them.
 
 If you change `CORS_ORIGINS` or `VITE_API_URL`, redeploy the matching service.
 
