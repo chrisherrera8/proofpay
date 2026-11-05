@@ -22,6 +22,22 @@ Run the API: `uv run uvicorn app.main:app --reload`.
 Run the site: `cd web && cp .env.example .env`, set `VITE_PAYPAL_CLIENT_ID`, then `npm install && npm run dev` (http://localhost:5173).
 For a hosted site, add its URL to `CORS_ORIGINS` on the API.
 
+## Deploy (free tier)
+
+**API on Render.** New > Blueprint, pick this repo; it reads `render.yaml`. Set the
+secrets when prompted: `DATABASE_URL` (Neon string ending in `?sslmode=require`),
+`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, and `CORS_ORIGINS` as a JSON list holding the
+site's URL, for example `["https://proofpay.pages.dev"]`. The start command runs
+`alembic upgrade head` before the server. The service sleeps when idle, so the first
+request after a pause takes 30-60 seconds.
+
+**Site on Cloudflare Pages.** Connect the repo, then set root directory `web`, build
+command `npm run build`, output directory `dist`. Add the variables `VITE_API_URL` (the
+Render URL, no trailing slash), `VITE_PAYPAL_CLIENT_ID` (sandbox client ID) and
+`NODE_VERSION` (22). Variables are baked in at build time, so redeploy after changing them.
+
+If you change `CORS_ORIGINS` or `VITE_API_URL`, redeploy the matching service.
+
 ## Warning: PayPal authorization honor period
 
 A PayPal authorization is valid for 29 days, but only the first 3 are the

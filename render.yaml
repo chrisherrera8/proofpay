@@ -1,0 +1,24 @@
+# Render Blueprint for the API. The React site is deployed separately on Cloudflare Pages.
+# Secrets are marked sync: false; Render asks for them in the dashboard on first deploy.
+services:
+  - type: web
+    name: proofpay-api
+    runtime: python
+    plan: free
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    # Free web services have no pre-deploy hook, so migrate on start (a no-op once at head).
+    startCommand: uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: DATABASE_URL # Neon connection string, with ?sslmode=require
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: CORS_ORIGINS # JSON list, e.g. ["https://proofpay.pages.dev"]
+        sync: false
