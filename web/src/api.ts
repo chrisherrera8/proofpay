@@ -13,20 +13,34 @@ export interface Job {
   checklist_items: { id: number; label: string; required: boolean; position: number }[];
 }
 
+export class ApiError extends Error {}
+
+// FastAPI sends 422 details as a list of {loc, msg}; turn that into one readable line.
+function describe(detail: unknown, fallback: string): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) => `${String(d.loc?.at(-1) ?? "field")}: ${String(d.msg ?? "invalid").replace(/^Value error, /, "")}`)
+      .join("; ");
+  }
+  return fallback;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json" },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, { ...init, headers: { "Content-Type": "application/json" } });
+  } catch {
+    throw new ApiError("Can't reach the booking server. Check your connection and try again.");
+  }
   if (!res.ok) {
-    let detail = res.statusText;
+    let detail: unknown = null;
     try {
-      const body = await res.json();
-      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      detail = (await res.json()).detail;
     } catch {
-      /* keep statusText */
+      /* no JSON body */
     }
-    throw new Error(detail);
+    throw new ApiError(describe(detail, `Something went wrong (${res.status}). Please try again.`));
   }
   return res.json();
 }

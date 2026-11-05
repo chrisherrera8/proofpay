@@ -29,3 +29,6 @@ body { margin: 0; font-family: system-ui, sans-serif; color: var(--ink); backgro
 .total { margin: 20px 0 12px; }
 .error { color: #b3261e; }
 .footer { text-align: center; padding: 24px; color: var(--muted); font-size: .85rem; }
+.field-error { color: #b3261e; font-size: .8rem; font-weight: 400; }
+.form input[aria-invalid="true"] { border-color: #b3261e; }
+.form input:disabled, .pick:disabled { opacity: .6; cursor: not-allowed; }
