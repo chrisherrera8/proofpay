@@ -1,12 +1,25 @@
-"""Checklist templates keyed on service_type. A job gets a copy at booking time."""
+"""Checklist templates keyed on service_type (the three site tiers). A job gets a copy at booking time."""
 
 # (label, required)
+_BASIC = [
+    ("Kitchen", True),
+    ("Bathroom", True),
+    ("Floors", True),
+    ("Surfaces", True),
+]
+_DEEP = _BASIC + [
+    ("Oven", False),
+    ("Baseboards", False),
+    ("Inside cabinets", False),
+]
+_DELUXE = _DEEP + [
+    ("Inside refrigerator", False),
+    ("Windows", False),
+    ("Laundry folded", False),
+]
+
 CHECKLIST_TEMPLATES: dict[str, list[tuple[str, bool]]] = {
-    "standard_clean": [
-        ("Kitchen", True),
-        ("Bathroom", True),
-        ("Floors", True),
-        ("Surfaces", True),
-        ("Oven", False),
-    ],
+    "basic": _BASIC,
+    "deep": _DEEP,
+    "deluxe": _DELUXE,
 }

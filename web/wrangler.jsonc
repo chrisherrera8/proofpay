@@ -1,0 +1,9 @@
+{
+  "name": "proofpay",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    // Serve index.html for unknown paths so /book and /booked/:id work on refresh.
+    "not_found_handling": "single-page-application"
+  }
+}

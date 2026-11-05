@@ -3,9 +3,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.checklists import CHECKLIST_TEMPLATES
+from app.pricing import TIER_PRICES
 
 ServiceType = Literal[tuple(CHECKLIST_TEMPLATES)]  # type: ignore[valid-type]
 
@@ -25,6 +26,13 @@ class JobCreate(BaseModel):
         if v.tzinfo is None:
             raise ValueError("scheduled_at must include a timezone")
         return v
+
+    @model_validator(mode="after")
+    def _price_matches_tier(self) -> "JobCreate":
+        expected = TIER_PRICES[self.service_type]
+        if self.amount != expected:
+            raise ValueError(f"amount for {self.service_type} must be {expected}")
+        return self
 
 
 class ChecklistItemOut(BaseModel):

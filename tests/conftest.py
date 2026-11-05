@@ -60,7 +60,7 @@ def make_job(db):
             customer_name="Test Customer",
             customer_email="customer@example.com",
             address="1 Test St",
-            service_type="standard_clean",
+            service_type="basic",
             scheduled_at=datetime(2026, 11, 10, 9, 0, tzinfo=timezone.utc),
             amount=Decimal("10.00"),
             currency="USD",

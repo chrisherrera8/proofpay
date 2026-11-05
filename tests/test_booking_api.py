@@ -19,9 +19,9 @@ BODY = {
     "customer_name": "Ada Lovelace",
     "customer_email": "ada@example.com",
     "address": "12 Analytical Way",
-    "service_type": "standard_clean",
+    "service_type": "basic",
     "scheduled_at": "2026-11-10T09:00:00Z",
-    "amount": "120.00",
+    "amount": "10.00",
 }
 
 
@@ -34,7 +34,7 @@ def test_book_job_happy_path(client, db):
     assert r.status_code == 201
     data = r.json()
     assert data["status"] == "BOOKED"
-    assert data["amount"] == "120.00"
+    assert data["amount"] == "10.00"
     assert data["currency"] == "USD"
     assert data["payment"] is None
 
@@ -49,14 +49,34 @@ def test_book_job_happy_path(client, db):
 
 def test_checklist_copied_from_template(client):
     items = client.post("/api/jobs", json=BODY).json()["checklist_items"]
-    assert [i["label"] for i in items] == ["Kitchen", "Bathroom", "Floors", "Surfaces", "Oven"]
-    assert [i["position"] for i in items] == [0, 1, 2, 3, 4]
-    assert [i["required"] for i in items] == [True, True, True, True, False]
+    assert [i["label"] for i in items] == ["Kitchen", "Bathroom", "Floors", "Surfaces"]
+    assert [i["position"] for i in items] == [0, 1, 2, 3]
+    assert [i["required"] for i in items] == [True, True, True, True]
 
 
 @pytest.mark.parametrize("amount", ["0", "-5", "0.00", "abc", "10.001"])
 def test_invalid_amount_rejected(client, db, amount):
     r = client.post("/api/jobs", json={**BODY, "amount": amount})
+    assert r.status_code == 422
+    assert db.scalars(select(Job)).all() == []
+    assert db.scalars(select(AuditLog)).all() == []
+
+
+@pytest.mark.parametrize(
+    "service_type,amount", [("basic", "10.00"), ("deep", "20.00"), ("deluxe", "30.00")]
+)
+def test_each_tier_books_at_its_price(client, service_type, amount):
+    r = client.post("/api/jobs", json={**BODY, "service_type": service_type, "amount": amount})
+    assert r.status_code == 201
+    assert r.json()["amount"] == amount
+
+
+@pytest.mark.parametrize(
+    "service_type,amount",
+    [("deluxe", "1.00"), ("deluxe", "10.00"), ("basic", "30.00"), ("deep", "20.01"), ("basic", "9.99")],
+)
+def test_wrong_price_for_tier_rejected(client, db, service_type, amount):
+    r = client.post("/api/jobs", json={**BODY, "service_type": service_type, "amount": amount})
     assert r.status_code == 422
     assert db.scalars(select(Job)).all() == []
     assert db.scalars(select(AuditLog)).all() == []
@@ -83,7 +103,7 @@ def test_get_job(client):
     r = client.get(f"/api/jobs/{job_id}")
     assert r.status_code == 200
     assert r.json()["id"] == job_id
-    assert len(r.json()["checklist_items"]) == 5
+    assert len(r.json()["checklist_items"]) == 4
 
 
 def test_get_unknown_job_404(client):
