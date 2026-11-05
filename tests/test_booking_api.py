@@ -21,7 +21,7 @@ BODY = {
     "address": "12 Analytical Way",
     "service_type": "basic",
     "scheduled_at": "2026-11-10T09:00:00Z",
-    "amount": "120.00",
+    "amount": "10.00",
 }
 
 
@@ -34,7 +34,7 @@ def test_book_job_happy_path(client, db):
     assert r.status_code == 201
     data = r.json()
     assert data["status"] == "BOOKED"
-    assert data["amount"] == "120.00"
+    assert data["amount"] == "10.00"
     assert data["currency"] == "USD"
     assert data["payment"] is None
 
@@ -57,6 +57,26 @@ def test_checklist_copied_from_template(client):
 @pytest.mark.parametrize("amount", ["0", "-5", "0.00", "abc", "10.001"])
 def test_invalid_amount_rejected(client, db, amount):
     r = client.post("/api/jobs", json={**BODY, "amount": amount})
+    assert r.status_code == 422
+    assert db.scalars(select(Job)).all() == []
+    assert db.scalars(select(AuditLog)).all() == []
+
+
+@pytest.mark.parametrize(
+    "service_type,amount", [("basic", "10.00"), ("deep", "20.00"), ("deluxe", "30.00")]
+)
+def test_each_tier_books_at_its_price(client, service_type, amount):
+    r = client.post("/api/jobs", json={**BODY, "service_type": service_type, "amount": amount})
+    assert r.status_code == 201
+    assert r.json()["amount"] == amount
+
+
+@pytest.mark.parametrize(
+    "service_type,amount",
+    [("deluxe", "1.00"), ("deluxe", "10.00"), ("basic", "30.00"), ("deep", "20.01"), ("basic", "9.99")],
+)
+def test_wrong_price_for_tier_rejected(client, db, service_type, amount):
+    r = client.post("/api/jobs", json={**BODY, "service_type": service_type, "amount": amount})
     assert r.status_code == 422
     assert db.scalars(select(Job)).all() == []
     assert db.scalars(select(AuditLog)).all() == []
