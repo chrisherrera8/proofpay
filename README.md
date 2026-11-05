@@ -10,13 +10,17 @@ Built for the PayPal AI Hackathon (Devpost).
 ## Layout
 
 - `app/` FastAPI service (API, state machine, policy engine, webhooks)
-- `web/` Vite app: `/widget` (Wix embed), `/cleaner`, `/admin`
-- `spikes/` throwaway PayPal/Wix/MCP experiments
+- `web/` Vite app: `/` (cleaning site with 3 tiers), `/book`, `/cleaner`, `/admin`
+- `spikes/` throwaway PayPal/MCP experiments
 
 ## Setup
 
 Copy `.env.example` to `.env` and fill in PayPal sandbox credentials.
 (Full setup instructions to follow.)
+
+Run the API: `uv run uvicorn app.main:app --reload`.
+Run the site: `cd web && cp .env.example .env`, set `VITE_PAYPAL_CLIENT_ID`, then `npm install && npm run dev` (http://localhost:5173).
+For a hosted site, add its URL to `CORS_ORIGINS` on the API.
 
 ## Warning: PayPal authorization honor period
 

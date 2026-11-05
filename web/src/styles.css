@@ -1,0 +1,31 @@
+:root { --brand: #0b7a75; --ink: #1c2b2a; --muted: #5f706f; --bg: #f6faf9; --card: #fff; --line: #dbe6e4; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+.nav { display: flex; justify-content: space-between; align-items: center; padding: 14px 24px; background: var(--card); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 700; font-size: 1.2rem; color: var(--brand); text-decoration: none; }
+.btn { display: inline-block; background: var(--brand); color: #fff; padding: 12px 22px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+.btn.small { padding: 8px 16px; }
+.hero { text-align: center; padding: 72px 20px; background: linear-gradient(#e3f4f2, var(--bg)); }
+.hero h1 { max-width: 700px; margin: 0 auto 12px; font-size: clamp(1.8rem, 5vw, 2.8rem); }
+.hero p { max-width: 560px; margin: 0 auto 24px; color: var(--muted); }
+.section { padding: 48px 20px; max-width: 1000px; margin: 0 auto; }
+.section.narrow { max-width: 560px; }
+.section h2 { text-align: center; }
+.tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-top: 24px; }
+.card { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; }
+.card.popular { border: 2px solid var(--brand); }
+.card h3 { margin: 0; }
+.card ul { padding-left: 18px; flex: 1; }
+.card .btn { text-align: center; }
+.badge { position: absolute; top: -12px; right: 16px; background: var(--brand); color: #fff; font-size: .75rem; padding: 4px 10px; border-radius: 99px; }
+.price { font-size: 2.4rem; font-weight: 700; margin: 8px 0; }
+.muted { color: var(--muted); font-size: .9rem; }
+.tier-pick { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+.pick { flex: 1; padding: 10px; border: 1px solid var(--line); background: var(--card); border-radius: 8px; cursor: pointer; font: inherit; }
+.pick.active { border: 2px solid var(--brand); color: var(--brand); font-weight: 600; }
+.form { display: grid; gap: 14px; }
+.form label { display: grid; gap: 4px; font-size: .9rem; font-weight: 600; }
+.form input { padding: 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.total { margin: 20px 0 12px; }
+.error { color: #b3261e; }
+.footer { text-align: center; padding: 24px; color: var(--muted); font-size: .85rem; }
