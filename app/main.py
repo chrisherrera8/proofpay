@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api import jobs
+from app.api import jobs, paypal
 from app.state_machine import InvalidTransition
 
 app = FastAPI(title="ProofPay")
 app.include_router(jobs.router)
+app.include_router(paypal.router)
 
 
 @app.exception_handler(InvalidTransition)
