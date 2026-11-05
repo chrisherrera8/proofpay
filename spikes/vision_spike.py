@@ -21,6 +21,7 @@ Usage:  python3 spikes/vision_spike.py [gemini|claude ...] [-v] [--cases=a,b]
 import base64
 import io
 import json
+import os
 import re
 import sys
 import time
@@ -37,17 +38,20 @@ def build_prompt(checklist):
     return (
         "You verify home-cleaning work. Image 1 is BEFORE, image 2 is AFTER, same room. "
         "Judge each checklist item from the AFTER photo, using BEFORE for comparison. "
-        "If an item can't be seen in the photos, or the photos are the same, unrelated, "
-        "or too unclear to judge, fail the item. "
+        "The cleaner may have photographed only part of the room. If an item is not visible "
+        "in the AFTER photo, mark it visible=false and pass=true (not applicable) and do not "
+        "let it count against the result; judge overall_pass and score only on the items you can see. "
+        "Still fail the visible items if the photos are the same, unrelated to each other, "
+        "or too unclear to judge, and fail overall if none of the items are visible. "
         "Reply with JSON only: "
-        '{"items":[{"item":str,"pass":bool,"confidence":number 0-1,"note":str}],'
+        '{"items":[{"item":str,"visible":bool,"pass":bool,"confidence":number 0-1,"note":str}],'
         '"overall_pass":bool,"score":number 0-1}\nChecklist:\n'
         + "\n".join(f"- {c}" for c in checklist)
     )
 
 
 def load_env():
-    env = {}
+    env = {k: os.environ[k] for k in ("GEMINI_MODEL", "ANTHROPIC_MODEL") if k in os.environ}
     p = ROOT / ".env"
     if p.exists():
         for line in p.read_text().splitlines():
@@ -73,7 +77,7 @@ def parse_json(text):
 
 
 def gemini(env, imgs, prompt):
-    model = env.get("GEMINI_MODEL", "gemini-3.5-flash")
+    model = env.get("GEMINI_MODEL", "gemini-3.6-flash")
     parts = [{"text": prompt}] + [
         {"inline_data": {"mime_type": "image/jpeg", "data": b}} for b in imgs
     ]
