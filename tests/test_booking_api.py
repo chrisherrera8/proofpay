@@ -19,7 +19,7 @@ BODY = {
     "customer_name": "Ada Lovelace",
     "customer_email": "ada@example.com",
     "address": "12 Analytical Way",
-    "service_type": "standard_clean",
+    "service_type": "basic",
     "scheduled_at": "2026-11-10T09:00:00Z",
     "amount": "120.00",
 }
@@ -49,9 +49,9 @@ def test_book_job_happy_path(client, db):
 
 def test_checklist_copied_from_template(client):
     items = client.post("/api/jobs", json=BODY).json()["checklist_items"]
-    assert [i["label"] for i in items] == ["Kitchen", "Bathroom", "Floors", "Surfaces", "Oven"]
-    assert [i["position"] for i in items] == [0, 1, 2, 3, 4]
-    assert [i["required"] for i in items] == [True, True, True, True, False]
+    assert [i["label"] for i in items] == ["Kitchen", "Bathroom", "Floors", "Surfaces"]
+    assert [i["position"] for i in items] == [0, 1, 2, 3]
+    assert [i["required"] for i in items] == [True, True, True, True]
 
 
 @pytest.mark.parametrize("amount", ["0", "-5", "0.00", "abc", "10.001"])
@@ -83,7 +83,7 @@ def test_get_job(client):
     r = client.get(f"/api/jobs/{job_id}")
     assert r.status_code == 200
     assert r.json()["id"] == job_id
-    assert len(r.json()["checklist_items"]) == 5
+    assert len(r.json()["checklist_items"]) == 4
 
 
 def test_get_unknown_job_404(client):
