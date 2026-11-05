@@ -10,9 +10,10 @@ import pytest  # noqa: E402
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
 from sqlalchemy import text  # noqa: E402
+from sqlalchemy.orm import Session  # noqa: E402
 
 from app.config import get_settings  # noqa: E402
-from app.db import SessionLocal, engine  # noqa: E402
+from app.db import engine  # noqa: E402
 from app.models import Job  # noqa: E402
 
 TABLES = (
@@ -26,15 +27,29 @@ def _test_schema():
     command.upgrade(Config("alembic.ini"), "head")
 
 
-@pytest.fixture
-def db(_test_schema):
+@pytest.fixture(scope="session", autouse=True)
+def _clean_slate(_test_schema):
     # TRUNCATE doesn't fire the row-level append-only trigger, so it can reset the audit log.
     with engine.begin() as conn:
         assert conn.execute(text("SELECT current_schema()")).scalar() == "test"
         conn.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
-    with SessionLocal() as session:
-        yield session
-        session.rollback()
+
+
+@pytest.fixture
+def db(_clean_slate):
+    """A session wrapped in an outer transaction that is rolled back after every test.
+
+    session.commit() only releases a savepoint, so code under test can commit freely and
+    nothing ever reaches the database.
+    """
+    with engine.connect() as conn:
+        outer = conn.begin()
+        session = Session(bind=conn, join_transaction_mode="create_savepoint", expire_on_commit=False)
+        try:
+            yield session
+        finally:
+            session.close()
+            outer.rollback()
 
 
 @pytest.fixture
