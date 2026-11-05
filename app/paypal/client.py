@@ -49,6 +49,8 @@ class Authorization:
     currency: str | None
     order_status: str | None
     debug_id: str | None
+    payer_email: str | None = None
+    payer_id: str | None = None
 
 
 def request_id(kind: str, key: str) -> str:
@@ -106,10 +108,13 @@ class PayPalClient:
         )
         data = self._json_or_raise(resp, "authorize order")
         debug_id = resp.headers.get("PayPal-Debug-Id")
+        payer = data.get("payer") or {}
+        payer_email, payer_id = payer.get("email_address"), payer.get("payer_id")
         try:
             auth = data["purchase_units"][0]["payments"]["authorizations"][0]
         except (KeyError, IndexError, TypeError):
-            return Authorization(None, None, None, None, data.get("status"), debug_id)
+            return Authorization(None, None, None, None, data.get("status"), debug_id,
+                                 payer_email, payer_id)
         amount = auth.get("amount") or {}
         return Authorization(
             id=auth.get("id"),
@@ -118,6 +123,8 @@ class PayPalClient:
             currency=amount.get("currency_code"),
             order_status=data.get("status"),
             debug_id=debug_id,
+            payer_email=payer_email,
+            payer_id=payer_id,
         )
 
     def _post(self, path: str, body: dict | None, *, request_id: str) -> httpx.Response:

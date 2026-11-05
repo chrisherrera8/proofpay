@@ -37,6 +37,7 @@ Call this only after the buyer has approved the order. It returns an `Authorizat
 | `amount`, `currency` | amount PayPal authorized (`Decimal`) |
 | `order_status` | status of the order itself |
 | `debug_id` | `PayPal-Debug-Id` header |
+| `payer_email`, `payer_id` | the PayPal account that approved the order (`None` if PayPal didn't send it) |
 
 A non-`CREATED` status (`DENIED`, `PENDING`, ...) is **returned, not raised**. The route decides what
 to do with it: leave the job in `BOOKED`, write an audit row, return an error. The client does not

@@ -129,10 +129,13 @@ def authorize(
 
     try:
         transition(
-            db, job, JobStatus.AUTHORIZED, actor="customer", event="PAYPAL_AUTHORIZED",
+            # The PayPal account that approved the order is recorded as the authorizing actor.
+            db, job, JobStatus.AUTHORIZED, actor=auth.payer_email or "customer",
+            event="PAYPAL_AUTHORIZED",
             payload={
                 "order_id": payment.order_id, "authorization_id": auth.id,
                 "amount": auth.amount, "currency": auth.currency, "debug_id": auth.debug_id,
+                "payer_email": auth.payer_email, "payer_id": auth.payer_id,
             },
         )
         # After transition(): it refreshes the job row, which would discard earlier assignments.

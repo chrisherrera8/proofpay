@@ -17,7 +17,9 @@ class FakePayPal(PayPalClient):
         self.authorize_calls = []
         self.order_error = None
         self.authorize_error = None
-        self.auth = Authorization("A1", "CREATED", Decimal("10.00"), "USD", "COMPLETED", "dbg")
+        self.auth = Authorization(
+            "A1", "CREATED", Decimal("10.00"), "USD", "COMPLETED", "dbg", "buyer@example.com", "PAYER1"
+        )
 
     def create_order(self, *, job_id, amount, currency, description=None):
         self.order_calls.append(job_id)
@@ -118,6 +120,8 @@ def test_authorize_success(client, db, ordered_job, paypal):
     assert [r.event for r in rows] == ["PAYPAL_ORDER_CREATED", "PAYPAL_AUTHORIZED"]
     assert (rows[1].from_status, rows[1].to_status) == ("BOOKED", "AUTHORIZED")
     assert rows[1].payload["authorization_id"] == "A1"
+    assert rows[1].actor == "buyer@example.com"
+    assert (rows[1].payload["payer_email"], rows[1].payload["payer_id"]) == ("buyer@example.com", "PAYER1")
     assert verify_chain(db) is None
 
 
@@ -163,6 +167,12 @@ def test_authorize_wrong_job_status(client, db, ordered_job, paypal):
     db.commit()
     assert authorize(client, ordered_job).status_code == 409
     assert paypal.authorize_calls == []
+
+
+def test_authorize_without_payer_info_falls_back_to_customer(client, db, ordered_job, paypal):
+    paypal.auth = Authorization("A1", "CREATED", Decimal("10.00"), "USD", "COMPLETED", "dbg")
+    assert authorize(client, ordered_job).status_code == 200
+    assert db.scalars(select(AuditLog).order_by(AuditLog.id.desc())).first().actor == "customer"
 
 
 def test_authorize_repeat_is_idempotent(client, db, ordered_job, paypal):

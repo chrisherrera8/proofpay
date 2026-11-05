@@ -74,6 +74,7 @@ def test_request_id_is_deterministic_and_scoped():
 AUTH_OK = {
     "id": "O1",
     "status": "COMPLETED",
+    "payer": {"email_address": "buyer@example.com", "payer_id": "PAYER1"},
     "purchase_units": [
         {"payments": {"authorizations": [
             {"id": "A1", "status": "CREATED", "amount": {"currency_code": "USD", "value": "120.00"}}
@@ -91,6 +92,7 @@ def test_authorize_order_parses_result(client):
     auth = client.authorize_order("O1")
     assert (auth.id, auth.status, auth.amount, auth.currency) == ("A1", "CREATED", Decimal("120.00"), "USD")
     assert auth.debug_id == "dbg1"
+    assert (auth.payer_email, auth.payer_id) == ("buyer@example.com", "PAYER1")
     assert route.calls[0].request.headers["paypal-request-id"] == request_id("authorize", "O1")
 
 
