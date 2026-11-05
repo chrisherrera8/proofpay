@@ -6,3 +6,4 @@ node_modules/
 dist/
 .venv/
 spikes/webhook_events.jsonl
+spikes/vision_photos/
