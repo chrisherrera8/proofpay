@@ -26,8 +26,8 @@ For a hosted site, add its URL to `CORS_ORIGINS` on the API.
 
 **API on Render.** New > Blueprint, pick this repo; it reads `render.yaml`. Set the
 secrets when prompted: `DATABASE_URL` (Neon string ending in `?sslmode=require`),
-`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, and `CORS_ORIGINS` as a JSON list holding the
-site's URL, for example `["https://proofpay.pages.dev"]`. The start command runs
+`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, and `CORS_ORIGINS` set to the site's URL, for
+example `https://proofpay.example.workers.dev` (a JSON list or a comma-separated list also work). The start command runs
 `alembic upgrade head` before the server. The service sleeps when idle, so the first
 request after a pause takes 30-60 seconds.
 

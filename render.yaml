@@ -20,5 +20,5 @@ services:
         sync: false
       - key: PAYPAL_CLIENT_SECRET
         sync: false
-      - key: CORS_ORIGINS # JSON list, e.g. ["https://proofpay.pages.dev"]
+      - key: CORS_ORIGINS # the site URL, e.g. https://proofpay.<you>.workers.dev (comma-separate several)
         sync: false
