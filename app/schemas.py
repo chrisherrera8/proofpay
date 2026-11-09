@@ -64,6 +64,17 @@ class VerificationOut(BaseModel):
     created_at: datetime
 
 
+class DecisionOut(BaseModel):
+    outcome: Literal["auto_release", "needs_approval", "reject"]
+    reasons: list[str]
+
+
+class ApprovalDecisionIn(BaseModel):
+    decision: Literal["approve", "deny"]
+    decided_by: str = Field(min_length=1, max_length=200)
+    reason: str | None = Field(default=None, max_length=1000)
+
+
 class PhotoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -90,3 +101,4 @@ class JobOut(BaseModel):
     checklist_items: list[ChecklistItemOut]
     payment: PaymentSummary | None
     verification: VerificationOut | None = None
+    decision: DecisionOut | None = None

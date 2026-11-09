@@ -67,6 +67,27 @@ function PhotoSlot({ jobId, kind, photos, locked, onChange, onError }: {
   );
 }
 
+// What each policy outcome means for the job's status. The reasons are only shown while the job is still
+// in the state the decision put it in (after an admin approves, the stored decision is stale).
+const DECISION_VIEW = {
+  auto_release: { status: "RELEASED", title: "✅ Released" },
+  needs_approval: { status: "PENDING_APPROVAL", title: "⏳ Waiting for approval" },
+  reject: { status: "REJECTED", title: "❌ Rejected: please re-clean" },
+} as const;
+
+function DecisionPanel({ job }: { job: Job }) {
+  const d = job.decision;
+  if (!d) return null;
+  const view = DECISION_VIEW[d.outcome];
+  if (job.status !== view.status) return null;
+  return (
+    <div className="result" role="status">
+      <h3>{view.title}</h3>
+      <ul>{d.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+    </div>
+  );
+}
+
 export default function CleanerJob() {
   const { jobId } = useParams() as { jobId: string };
   const [job, setJob] = useState<Job | null>(null);
@@ -138,7 +159,9 @@ export default function CleanerJob() {
         </button>
       )}
 
-      {v && !editable && (
+      <DecisionPanel job={job} />
+
+      {v && (
         <div className="result">
           <h3>{v.results.overall_pass ? "✅ Checks passed" : "⚠️ Some items need attention"}</h3>
           <p className="muted">Score {v.score} · {v.model}</p>

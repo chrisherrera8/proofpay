@@ -54,6 +54,18 @@ class Job(Base):
     verification: Mapped["Verification | None"] = relationship(  # noqa: F821
         primaryjoin=lambda: _latest_verification_join(), viewonly=True, uselist=False
     )
+    # The newest POLICY_DECIDED audit row, loaded the same way, so the API can show the decision.
+    decision_event: Mapped["AuditLog | None"] = relationship(  # noqa: F821
+        primaryjoin=lambda: _latest_decision_join(), viewonly=True, uselist=False
+    )
+
+    @property
+    def decision(self) -> dict | None:
+        """{outcome, reasons} from the latest POLICY_DECIDED audit row, or None before a decision."""
+        event = self.decision_event
+        if event is None:
+            return None
+        return {"outcome": event.payload.get("outcome"), "reasons": event.payload.get("reasons", [])}
 
 
 def _latest_verification_join():
@@ -62,6 +74,19 @@ def _latest_verification_join():
     newer = aliased(Verification)
     latest_id = select(func.max(newer.id)).where(newer.job_id == Job.id).correlate(Job).scalar_subquery()
     return and_(Verification.job_id == Job.id, Verification.id == latest_id)
+
+
+def _latest_decision_join():
+    from app.models.audit import AuditLog
+
+    newer = aliased(AuditLog)
+    latest_id = (
+        select(func.max(newer.id))
+        .where(newer.job_id == Job.id, newer.event == "POLICY_DECIDED")
+        .correlate(Job)
+        .scalar_subquery()
+    )
+    return and_(AuditLog.job_id == Job.id, AuditLog.id == latest_id)
 
 
 class ChecklistItem(Base):

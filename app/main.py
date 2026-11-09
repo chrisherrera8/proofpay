@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import cleaner, jobs, paypal
+from app.api import approvals, cleaner, jobs, paypal
 from app.config import get_settings
 from app.state_machine import InvalidTransition
 from app.vision import VisionError
@@ -17,6 +17,7 @@ app.add_middleware(
 app.include_router(jobs.router)
 app.include_router(paypal.router)
 app.include_router(cleaner.router)
+app.include_router(approvals.router)
 
 
 @app.exception_handler(InvalidTransition)
