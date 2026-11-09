@@ -10,7 +10,8 @@ from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Mandate
+from app.models import Approval, Job, JobStatus, Mandate, Verification
+from app.state_machine import transition
 
 Outcome = Literal["auto_release", "needs_approval", "reject"]
 
@@ -111,3 +112,36 @@ def get_mandate(db: Session) -> MandateRules:
         ),
         required_items=tuple(row.required_items or ()),
     )
+
+
+_OUTCOME_STATUS = {
+    "auto_release": JobStatus.RELEASED,
+    "needs_approval": JobStatus.PENDING_APPROVAL,
+    "reject": JobStatus.REJECTED,
+}
+
+
+def decide(db: Session, job: Job) -> Decision:
+    """Evaluate a VERIFIED job and move it to RELEASED, PENDING_APPROVAL or REJECTED.
+
+    Writes the POLICY_DECIDED audit row (through transition()) and, for needs_approval, a PENDING
+    approval, all in the caller's transaction. Does not commit.
+    """
+    verification = db.scalar(
+        select(Verification).where(Verification.job_id == job.id).order_by(Verification.id.desc()).limit(1)
+    )
+    if verification is None:
+        raise ValueError(f"Job {job.id} has no verification to decide on")
+    rules = get_mandate(db)
+    score = Decimal(verification.score) if verification.score is not None else Decimal("0")
+    decision = evaluate(job.amount, score, verification.results.get("items", []), rules)
+
+    transition(
+        db, job, _OUTCOME_STATUS[decision.outcome], actor="policy-engine", event="POLICY_DECIDED",
+        payload={"outcome": decision.outcome, "reasons": decision.reasons, "rules": rules.as_dict(),
+                 "verification_id": verification.id},
+    )
+    if decision.outcome == "needs_approval":
+        db.add(Approval(job_id=job.id, status="PENDING", reason="; ".join(decision.reasons)[:1000]))
+        db.flush()
+    return decision

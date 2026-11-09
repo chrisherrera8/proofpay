@@ -168,3 +168,76 @@ def test_get_mandate_null_columns_fall_back_to_defaults(db):
 
 def test_as_dict_is_json_friendly():
     assert DEFAULT_RULES.as_dict() == {"min_score": "0.80", "auto_release_ceiling": "25.00", "required_items": []}
+
+
+# --- decide() ----------------------------------------------------------------------------------
+
+import pytest  # noqa: E402
+from sqlalchemy import select  # noqa: E402
+
+from app.audit import verify_chain  # noqa: E402
+from app.models import Approval, AuditLog, Verification  # noqa: E402
+from app.policy import decide  # noqa: E402
+from app.state_machine import InvalidTransition  # noqa: E402
+
+
+def verified_job(make_job, db, items=ALL_OK, score="1.00", amount=None):
+    job = make_job("VERIFIED")
+    if amount:
+        job.amount = D(amount)
+    db.add(Verification(job_id=job.id, score=D(score), results={"items": items}, model="fake"))
+    db.commit()
+    return job
+
+
+def test_decide_auto_release(db, make_job):
+    job = verified_job(make_job, db)
+    d = decide(db, job)
+    assert d.outcome == "auto_release"
+    assert job.status == "RELEASED"
+    row = db.scalar(select(AuditLog).where(AuditLog.event == "POLICY_DECIDED"))
+    assert (row.actor, row.from_status, row.to_status) == ("policy-engine", "VERIFIED", "RELEASED")
+    assert row.payload["outcome"] == "auto_release"
+    assert row.payload["rules"] == DEFAULT_RULES.as_dict()
+    assert db.scalars(select(Approval)).all() == []
+    assert verify_chain(db) is None
+
+
+def test_decide_needs_approval_creates_pending_approval(db, make_job):
+    job = verified_job(make_job, db, amount="30.00")
+    decide(db, job)
+    assert job.status == "PENDING_APPROVAL"
+    a = db.scalar(select(Approval))
+    assert (a.job_id, a.status, a.decided_by) == (job.id, "PENDING", None)
+    assert "above the auto-release ceiling" in a.reason
+
+
+def test_decide_reject(db, make_job):
+    job = verified_job(make_job, db, score="0.50")
+    decide(db, job)
+    assert job.status == "REJECTED"
+    assert db.scalars(select(Approval)).all() == []
+
+
+def test_decide_uses_latest_verification_and_mandate(db, make_job):
+    job = verified_job(make_job, db, score="0.50")
+    db.add(Verification(job_id=job.id, score=D("1.00"), results={"items": ALL_OK}, model="fake"))
+    db.add(Mandate(min_score=D("0.90"), auto_release_ceiling=D("5.00"), required_items=[]))
+    db.commit()
+    d = decide(db, job)
+    assert d.outcome == "needs_approval"  # newest verification passes; $10 > the $5 mandate ceiling
+    row = db.scalar(select(AuditLog).where(AuditLog.event == "POLICY_DECIDED"))
+    assert row.payload["rules"]["auto_release_ceiling"] == "5.00"
+
+
+def test_decide_requires_verified_job(db, make_job):
+    job = verified_job(make_job, db)
+    job.status = "SUBMITTED"
+    db.commit()
+    with pytest.raises(InvalidTransition):
+        decide(db, job)
+
+
+def test_decide_without_verification_raises(db, make_job):
+    with pytest.raises(ValueError):
+        decide(db, make_job("VERIFIED"))
