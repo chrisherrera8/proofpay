@@ -220,3 +220,38 @@ def test_labels_match_ignoring_case_and_surrounding_whitespace():
 def test_non_dict_entries_in_the_answer_are_skipped():
     r = score_answer({"items": ["Kitchen", None, item("Kitchen")]}, ["Kitchen"], "m")
     assert r.items[0].visible is True
+
+
+def test_non_finite_confidence_becomes_zero():
+    for bad in ("nan", "inf", "-inf", float("nan"), float("inf")):
+        r = score_answer({"items": [item("Kitchen", conf=bad)]}, ["Kitchen"], "m")
+        assert r.items[0].confidence == 0.0, bad
+
+
+@pytest.mark.parametrize("value,expected", [
+    ("false", False), ("False", False), (" no ", False), ("0", False), (0, False), (False, False),
+    ("true", True), ("TRUE", True), ("yes", True), ("1", True), (1, True), (True, True),
+    ("maybe", False), (None, False), ([], False),  # unreadable means fail
+])
+def test_pass_is_parsed_not_truthy(value, expected):
+    r = score_answer({"items": [item("Kitchen", passed=value)]}, ["Kitchen"], "m")
+    assert r.items[0].passed is expected
+    assert r.overall_pass is expected
+
+
+@pytest.mark.parametrize("value,expected", [
+    ("false", False), ("no", False), (0, False), (False, False),
+    ("true", True), (1, True), (True, True),
+    ("maybe", True), (None, True),  # unreadable means visible, so it is judged and can fail
+])
+def test_visible_is_parsed_not_truthy(value, expected):
+    r = score_answer({"items": [item("Kitchen", visible=value, passed=False)]}, ["Kitchen"], "m")
+    assert r.items[0].visible is expected
+    assert r.items[0].passed is (not expected)  # a not-visible item never fails the job
+
+
+def test_null_or_missing_note_is_empty_not_the_word_none():
+    assert score_answer({"items": [item("Kitchen") | {"note": None}]}, ["Kitchen"], "m").items[0].note == ""
+    no_note = {k: v for k, v in item("Kitchen").items() if k != "note"}
+    assert score_answer({"items": [no_note]}, ["Kitchen"], "m").items[0].note == ""
+    assert score_answer({"items": [item("Kitchen") | {"note": 0}]}, ["Kitchen"], "m").items[0].note == ""

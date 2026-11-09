@@ -4,6 +4,7 @@ The model only reports what it sees per checklist item. Whether the job passed i
 plain code, so the LLM never decides an outcome by itself.
 """
 import json
+import math
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -88,9 +89,31 @@ def parse_model_json(text: str) -> dict:
 
 def _clamp01(v, default: float = 0.0) -> float:
     try:
-        return max(0.0, min(1.0, float(v)))
+        f = float(v)
     except (TypeError, ValueError):
         return default
+    if not math.isfinite(f):  # "nan" would otherwise clamp to 1.0
+        return default
+    return max(0.0, min(1.0, f))
+
+
+_TRUE = {"true", "yes", "1"}
+_FALSE = {"false", "no", "0"}
+
+
+def _as_bool(v, default: bool) -> bool:
+    """Read a boolean from the model's JSON. bool("false") is True in Python, so strings are parsed."""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    if isinstance(v, str):
+        word = v.strip().lower()
+        if word in _TRUE:
+            return True
+        if word in _FALSE:
+            return False
+    return default
 
 
 def score_answer(data: dict, checklist: list[str], model: str, in_tok: int = 0, out_tok: int = 0) -> VisionResult:
@@ -111,10 +134,10 @@ def score_answer(data: dict, checklist: list[str], model: str, in_tok: int = 0, 
         if x is None:
             items.append(ItemResult(label, False, True, 0.0, "Not assessed by the model"))
             continue
-        visible = bool(x.get("visible", True))
+        visible = _as_bool(x.get("visible"), True)
         # Not-visible items are not applicable: they never fail the job.
-        passed = True if not visible else bool(x.get("pass", False))
-        items.append(ItemResult(label, visible, passed, _clamp01(x.get("confidence")), str(x.get("note", ""))[:500]))
+        passed = True if not visible else _as_bool(x.get("pass"), False)
+        items.append(ItemResult(label, visible, passed, _clamp01(x.get("confidence")), str(x.get("note") or "")[:500]))
 
     visible_items = [i for i in items if i.visible]
     overall = bool(visible_items) and all(i.passed for i in visible_items)
