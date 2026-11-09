@@ -52,6 +52,9 @@ def list_photos(job_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Photo]
 
 async def _raw_body(request: Request) -> bytes:
     # Async only to read the body; no DB work here, so the event loop is never blocked on I/O.
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > MAX_PHOTO_BYTES:
+        raise HTTPException(413, "Photo is too large")
     return await request.body()
 
 

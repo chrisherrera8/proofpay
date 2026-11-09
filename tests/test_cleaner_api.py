@@ -78,6 +78,17 @@ def test_upload_rejects_bad_bodies(client, make_job, data, code):
     assert _post(client, make_job("AUTHORIZED"), "before", data).status_code == code
 
 
+def test_oversized_content_length_is_rejected_before_reading_body(client, make_job, monkeypatch):
+    async def body_must_not_be_read(self):
+        raise AssertionError("body was read despite oversized Content-Length")
+
+    monkeypatch.setattr("starlette.requests.Request.body", body_must_not_be_read)
+    job = make_job("AUTHORIZED")
+    res = client.post(f"/api/jobs/{job.id}/photos", params={"kind": "before"},
+                      content=JPEG, headers={"Content-Length": str(3 * 1024 * 1024 + 1)})
+    assert res.status_code == 413
+
+
 def test_upload_rejects_bad_kind_and_wrong_status_and_limit(client, make_job):
     job = make_job("AUTHORIZED")
     assert _post(client, job, "during").status_code == 422
