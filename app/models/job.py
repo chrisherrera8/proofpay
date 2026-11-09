@@ -50,6 +50,14 @@ class Job(Base):
         back_populates="job", order_by="ChecklistItem.position", cascade="all, delete-orphan"
     )
     payment: Mapped["Payment | None"] = relationship(back_populates="job", uselist=False)  # noqa: F821
+    verifications: Mapped[list["Verification"]] = relationship(  # noqa: F821
+        order_by="Verification.id.desc()", viewonly=True
+    )
+
+    @property
+    def verification(self) -> "Verification | None":  # noqa: F821
+        """The latest verification (a re-clean produces a new one)."""
+        return self.verifications[0] if self.verifications else None
 
 
 class ChecklistItem(Base):

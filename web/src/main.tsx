@@ -4,6 +4,8 @@ import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
 import Home from "./pages/Home";
 import Book from "./pages/Book";
 import Booked from "./pages/Booked";
+import CleanerJobs from "./pages/CleanerJobs";
+import CleanerJob from "./pages/CleanerJob";
 import "./styles.css";
 
 function Layout({ children }: { children: React.ReactNode }) {
@@ -27,6 +29,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/" element={<Home />} />
           <Route path="/book" element={<Book />} />
           <Route path="/booked/:jobId" element={<Booked />} />
+          <Route path="/cleaner" element={<CleanerJobs />} />
+          <Route path="/cleaner/:jobId" element={<CleanerJob />} />
           <Route path="*" element={<Home />} />
         </Routes>
       </Layout>

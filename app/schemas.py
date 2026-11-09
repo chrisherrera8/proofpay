@@ -54,6 +54,25 @@ class PaymentSummary(BaseModel):
     status: str
 
 
+class VerificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    score: Decimal | None
+    results: dict
+    model: str
+    created_at: datetime
+
+
+class PhotoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str
+    content_type: str
+    created_at: datetime
+
+
 class JobOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -70,3 +89,4 @@ class JobOut(BaseModel):
     created_at: datetime
     checklist_items: list[ChecklistItemOut]
     payment: PaymentSummary | None
+    verification: VerificationOut | None = None

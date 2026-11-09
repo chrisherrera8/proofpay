@@ -88,10 +88,10 @@ Spikes 0-5 and the repo scaffold (MIT license) are done (spikes 4 and 5 finished
 | Nov 2 (done) | Spikes 0-3, scaffold with MIT license. |
 | Nov 3 | ~~Spikes 4 and 5~~ (done Nov 4). ~~Models, Alembic, state machine, audit log, booking API, PayPal authorize endpoint~~ (done Nov 4, merged as PR #1; see `plans/finished/nov4-backend-foundation.md`). |
 | Nov 4-5 | ~~Customer site (home with 3 tiers, booking form with validation, PayPal button, confirmation page), CORS, server-side price check, three checklist templates~~ (done Nov 5, PR #2). ~~Deploy: Cloudflare + Render + Neon, live booking verified~~ (done Nov 5, ahead of the Nov 7 row). **Not started:** cleaner upload and vision verification (provider interface). |
-| Nov 5 | Policy engine and mandates, capture and Payouts, webhooks with signature verification, pytest on the policy engine and state machine. |
-| Nov 6 | Admin UI (approvals, audit log), rejection agent (re-clean draft), seed data. |
-| Nov 7 | ~~Deploy~~ (done Nov 5). Re-run the full flow on the hosted URLs after the new steps land. |
-| Nov 8 | README setup instructions, bug fixes, demo rehearsal. |
+| Nov 6 | ~~Housekeeping: both platforms deploy from `main`~~ (done). ~~Cleaner upload and vision verification~~ (built Nov 6 on `feature/cleaner-and-vision`, not yet merged or deployed; see "Pick up here", step 2). |
+| Nov 7 | Policy engine and mandates, capture and Payouts, webhooks with signature verification, pytest on the policy engine and state machine. |
+| Nov 8 | Admin UI (approvals, audit log), rejection agent (re-clean draft), seed data. |
+| Nov 8-9 | ~~Deploy~~ (done Nov 5). Re-run the full flow on the hosted URLs after the new steps land. README setup instructions, bug fixes, demo rehearsal. |
 | Nov 9 | **Freeze.** |
 | Nov 10 | Record the demo video (under 3 minutes) and write the Devpost text. |
 | Nov 11 | Buffer, repo and URL check. |
@@ -103,8 +103,12 @@ Spikes 0-5 and the repo scaffold (MIT license) are done (spikes 4 and 5 finished
 
 Where things stand: booking and authorization work live. The job stops at `AUTHORIZED`; nothing exists yet for the cleaner, the vision check, the policy engine, capture or payout. Do these in order:
 
-1. **Housekeeping (10 min):** repoint Render and Cloudflare to `main`, confirm a deploy, delete `feature/customer-site`. Warm the API before testing (cold start 30-60s).
-2. **Cleaner upload and vision verification:** `/cleaner` page (mobile photo upload, resize to about 1024px client-side), photos stored in Postgres, `POST` submit moves the job `AUTHORIZED → SUBMITTED`, then the vision call (provider interface, default `gemini-3.6-flash`) moves it to `VERIFIED` with per-item results. Needs a Gemini API key in `.env` and on Render.
+1. ~~**Housekeeping:** repoint Render and Cloudflare to `main`, confirm a deploy, delete `feature/customer-site`.~~ Done Nov 6: both platforms deploy from `main` (commit `968d40e`), the API and site return 200, and the local `feature/customer-site` branch is deleted (the remote branch is still to delete). Warm the API before testing (cold start 30-60s).
+2. ~~**Cleaner upload and vision verification**~~ Built Nov 6 on `feature/cleaner-and-vision` (uncommitted until reviewed; 170 tests pass, one live Gemini call matched its label). The `photos` and `verifications` tables already existed in the initial migration, so no new migration. Pieces:
+   - `app/vision/`: `VisionProvider` interface, `GeminiProvider` (REST, retries 429/503), prompt, and `score_answer()`, which decides pass/fail in code (at least one visible item and every visible item passing) and ignores the model's own `overall_pass`/`score`. Score is the share of visible items that passed.
+   - `app/api/cleaner.py`: `POST/GET/DELETE /api/jobs/{id}/photos` (raw image body, `?kind=before|after`, magic-byte check, 3 MB and 4-per-kind caps), `POST /submit` (`AUTHORIZED|REJECTED → SUBMITTED → VERIFIED`) and `POST /verify` to retry when the vision call fails (the job stays `SUBMITTED`). `JobOut` now includes the latest `verification`.
+   - Web: `/cleaner` (job list) and `/cleaner/:jobId` (client-side resize to 1024px, thumbnails, submit, per-item result).
+   - To do: add `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) on Render; run a hosted end-to-end check; photos from an earlier attempt are not cleared on a re-clean (decide when the reject path is built); `/cleaner` has no auth and lists every waiting job.
 3. **Policy engine and mandates:** deterministic Python returning `auto_release`, `needs_approval` or `reject`, with pytest on the engine and the state machine.
 4. **Capture and Payouts, then webhooks** with signature verification (`PAYPAL_WEBHOOK_ID` is in `.env.example`; the webhook URL is the Render API).
 5. **Admin UI** (approvals, audit log) and the rejection agent, then seed data and README setup.

@@ -12,7 +12,7 @@ from app.schemas import JobCreate, JobOut
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
-_LOAD = (selectinload(Job.checklist_items), selectinload(Job.payment))
+_LOAD = (selectinload(Job.checklist_items), selectinload(Job.payment), selectinload(Job.verifications))
 
 
 @router.post("", response_model=JobOut, status_code=201)
