@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.audit import verify_chain
 from app.db import get_db
 from app.main import app
-from app.models import AuditLog, ChecklistItem, Photo
+from app.models import AuditLog, ChecklistItem, Photo, Verification
 from app.vision import VisionError, get_vision_provider
 from app.vision.base import ItemResult, VisionResult
 
@@ -43,6 +43,10 @@ def client(db, vision):
     app.dependency_overrides[get_vision_provider] = lambda: vision
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+def events(db):
+    return db.scalars(select(AuditLog.event).order_by(AuditLog.id)).all()
 
 
 def _post(client, job, kind, data=JPEG):
@@ -123,6 +127,32 @@ def test_submit_runs_vision_and_verifies(client, db, make_job, vision):
     assert vision.calls == [(1, 1, ["Kitchen", "Bathroom", "Floors", "Surfaces"])]
     events = db.scalars(select(AuditLog.event).order_by(AuditLog.id)).all()
     assert events == ["PHOTO_UPLOADED", "PHOTO_UPLOADED", "JOB_SUBMITTED", "VERIFICATION_COMPLETED"]
+    assert verify_chain(db) is None
+
+
+def test_reclean_after_rejection_resubmits_and_latest_verification_wins(client, db, make_job, vision):
+    vision.fail_items = {"Kitchen"}
+    job = _ready(client, make_job, db)
+    first = client.post(f"/api/jobs/{job.id}/submit").json()
+    assert first["verification"]["results"]["overall_pass"] is False
+
+    # Nothing rejects a job yet (the policy engine comes later), so force it.
+    job.status = "REJECTED"
+    db.commit()
+    assert _post(client, job, "after").status_code == 201  # a REJECTED job is editable again
+
+    vision.fail_items = set()
+    second = client.post(f"/api/jobs/{job.id}/submit")
+    assert second.status_code == 200
+    assert second.json()["status"] == "VERIFIED"
+    assert second.json()["verification"]["results"]["overall_pass"] is True
+    assert second.json()["verification"]["id"] != first["verification"]["id"]
+    assert len(db.scalars(select(Verification)).all()) == 2
+    assert client.get(f"/api/jobs/{job.id}").json()["verification"]["id"] == second.json()["verification"]["id"]
+    assert events(db) == [
+        "PHOTO_UPLOADED", "PHOTO_UPLOADED", "JOB_SUBMITTED", "VERIFICATION_COMPLETED",
+        "PHOTO_UPLOADED", "JOB_SUBMITTED", "VERIFICATION_COMPLETED",
+    ]
     assert verify_chain(db) is None
 
 
