@@ -114,6 +114,35 @@ def test_delete_photo(client, db, make_job):
     assert db.scalars(select(Photo)).all() == []
 
 
+# --- photo access ---
+
+def test_photo_requested_through_wrong_job_is_404(client, db, make_job):
+    owner, other = make_job("AUTHORIZED"), make_job("AUTHORIZED")
+    pid = _post(client, owner, "before").json()["id"]
+    assert client.get(f"/api/jobs/{other.id}/photos/{pid}").status_code == 404
+    assert client.delete(f"/api/jobs/{other.id}/photos/{pid}").status_code == 404
+    assert client.get(f"/api/jobs/{owner.id}/photos/{pid}").status_code == 200
+    assert events(db) == ["PHOTO_UPLOADED"]
+
+
+def test_delete_photo_on_non_editable_job_is_409(client, db, make_job):
+    job = make_job("AUTHORIZED")
+    pid = _post(client, job, "before").json()["id"]
+    job.status = "VERIFIED"
+    db.commit()
+    assert client.delete(f"/api/jobs/{job.id}/photos/{pid}").status_code == 409
+    assert len(db.scalars(select(Photo)).all()) == 1
+    assert events(db) == ["PHOTO_UPLOADED"]
+
+
+def test_list_photos_missing_job_is_404(client):
+    assert client.get(f"/api/jobs/{uuid.uuid4()}/photos").status_code == 404
+
+
+def test_get_missing_photo_is_404(client, make_job):
+    assert client.get(f"/api/jobs/{make_job('AUTHORIZED').id}/photos/999999").status_code == 404
+
+
 def test_submit_runs_vision_and_verifies(client, db, make_job, vision):
     job = _ready(client, make_job, db)
     r = client.post(f"/api/jobs/{job.id}/submit")
