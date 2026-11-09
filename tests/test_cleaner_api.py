@@ -198,6 +198,29 @@ def test_reclean_after_rejection_resubmits_and_latest_verification_wins(client, 
     assert verify_chain(db) is None
 
 
+def test_list_jobs_includes_latest_verification(client, db, make_job, vision):
+    vision.fail_items = {"Kitchen"}
+    verified = _ready(client, make_job, db)
+    first = client.post(f"/api/jobs/{verified.id}/submit").json()["verification"]
+    waiting = make_job("AUTHORIZED")
+
+    # Re-clean: the list must show the newest verification, not the first one.
+    verified.status = "REJECTED"
+    db.commit()
+    assert _post(client, verified, "after").status_code == 201
+    vision.fail_items = set()
+    second = client.post(f"/api/jobs/{verified.id}/submit").json()["verification"]
+
+    rows = {r["id"]: r for r in client.get("/api/jobs").json()}
+    assert rows[str(verified.id)]["verification"]["id"] == second["id"] != first["id"]
+    assert rows[str(verified.id)]["verification"]["results"]["overall_pass"] is True
+    assert rows[str(waiting.id)]["verification"] is None
+
+    by_status = client.get("/api/jobs", params={"status": "VERIFIED"}).json()
+    assert [r["id"] for r in by_status] == [str(verified.id)]
+    assert by_status[0]["verification"]["id"] == second["id"]
+
+
 def test_failed_items_recorded(client, db, make_job, vision):
     vision.fail_items = {"Kitchen"}
     job = _ready(client, make_job, db)
