@@ -87,7 +87,7 @@ export const authorize = (jobId: string, orderId: string) =>
 
 export const getJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}`);
 
-export const listJobs = (status: string) => request<Job[]>(`/api/jobs?status=${status}`);
+export const listJobs = (status: string) => request<Job[]>(`/api/jobs?status=${encodeURIComponent(status)}`);
 
 export const listPhotos = (jobId: string) => request<Photo[]>(`/api/jobs/${jobId}/photos`);
 

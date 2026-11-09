@@ -74,10 +74,22 @@ export default function CleanerJob() {
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
 
-  const refresh = () =>
-    Promise.all([getJob(jobId), listPhotos(jobId)])
-      .then(([j, p]) => { setJob(j); setPhotos(p); })
-      .catch((e) => setError(e.message));
+  // Tracks the job on screen so a slow response for a previous job is dropped.
+  const currentJobId = useRef(jobId);
+  currentJobId.current = jobId;
+
+  const refresh = () => {
+    const requested = jobId;
+    return Promise.all([getJob(requested), listPhotos(requested)])
+      .then(([j, p]) => {
+        if (currentJobId.current !== requested) return;
+        setJob(j);
+        setPhotos(p);
+      })
+      .catch((e) => {
+        if (currentJobId.current === requested) setError(e.message);
+      });
+  };
 
   useEffect(() => { refresh(); }, [jobId]);
 
