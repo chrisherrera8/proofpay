@@ -1,6 +1,6 @@
 # Policy Engine Plan
 
-Step 3 of `plans/plan.md`. Branch: `feature/policy-engine`. Kept deliberately small for the demo.
+Step 3 of `plans/plan.md` (built Nov 9). Branch: `feature/policy-engine`. Kept deliberately small for the demo.
 
 ## What it does
 

@@ -101,7 +101,7 @@ Spikes 0-5 and the repo scaffold (MIT license) are done (spikes 4 and 5 finished
 
 ### Pick up here (next session)
 
-Where things stand (Nov 9): booking, PayPal authorization, cleaner photo upload and vision verification are built. A job now runs `BOOKED → AUTHORIZED → SUBMITTED → VERIFIED` and stops there; nothing exists yet for the policy engine, approvals, capture, payout, webhooks or the admin UI. Do these in order:
+Where things stand (Nov 9): booking, PayPal authorization, cleaner photo upload, vision verification and the policy engine are built. A job now runs `BOOKED → AUTHORIZED → SUBMITTED → VERIFIED` and then the engine moves it to `RELEASED`, `PENDING_APPROVAL` or `REJECTED` in the same request; nothing exists yet for capture, payout, webhooks or the admin UI. Do these in order:
 
 1. ~~**Housekeeping:** repoint Render and Cloudflare to `main`, confirm a deploy, delete `feature/customer-site`.~~ Done Nov 6: both platforms deploy from `main`, and the local `feature/customer-site` branch is deleted (the remote branch is still to delete). Warm the API before testing (cold start 30-60s).
 2. ~~**Cleaner upload and vision verification**~~ Built Nov 6-9 on `feature/cleaner-and-vision` (merged as PR #3 on Nov 9; 227 tests pass, 97% line coverage, one live Gemini call matched its label). The `photos` and `verifications` tables already existed in the initial migration, so no new migration. Pieces:
@@ -110,7 +110,11 @@ Where things stand (Nov 9): booking, PayPal authorization, cleaner photo upload 
    - Web: `/cleaner` (job list) and `/cleaner/:jobId` (client-side resize to 1024px, thumbnails, submit, per-item result).
    - Tests now run against a local Postgres (`docker compose up -d --wait`, then `uv run pytest`; override with `TEST_DATABASE_URL`). Coverage: `uv run pytest --cov=app --cov-report=term-missing`.
    - **Before merging:** add `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) on Render, then run a hosted end-to-end check.
-3. **Policy engine and mandates:** deterministic Python returning `auto_release`, `needs_approval` or `reject`, with pytest on the engine and the state machine. This is the next thing to build. Plan: `plans/policy-engine.md` (branch `feature/policy-engine`).
+3. ~~**Policy engine and mandates**~~ Built Nov 9 on `feature/policy-engine` (plan: `plans/finished/policy-engine.md`; 273 tests pass). Pieces:
+   - `app/policy.py`: pure `evaluate()` (seven ordered rules; the first match sets the outcome and every matching rule adds a reason), `DEFAULT_RULES` (min score 0.80, auto-release ceiling $25.00, no required items), `get_mandate(db)` (newest `mandates` row, a NULL column falls back to its default) and `decide(db, job)`, which moves `VERIFIED` to `RELEASED`, `PENDING_APPROVAL` or `REJECTED` with a `POLICY_DECIDED` audit row (outcome, reasons, rules in force, verification id) and a PENDING `Approval` for `needs_approval`. No migration.
+   - `/submit` and `/verify` call `decide()` after `VERIFIED` is committed. `JobOut.decision` (outcome and reasons) comes from the latest `POLICY_DECIDED` audit row, eager-loaded, also in the list endpoint.
+   - `POST /api/jobs/{id}/approval` (`approve` or `deny`, with `decided_by` and an optional `reason`): `PENDING_APPROVAL` to `RELEASED` or `REJECTED`; 409 if not pending, 404 for an unknown job. Audit actor is `admin`, the name is in the payload.
+   - Web: `/cleaner/:jobId` shows the decision and its reasons, and the per-item result on a rejected job.
 4. **Capture and Payouts, then webhooks** with signature verification (`PAYPAL_WEBHOOK_ID` is in `.env.example`; the webhook URL is the Render API).
 5. **Admin UI** (approvals, audit log) and the rejection agent, then seed data and README setup.
 
@@ -119,6 +123,14 @@ Known gaps in the shipped cleaner work (decide when the matching step is built):
 - Photos from an earlier attempt are not cleared on a re-clean. Decide this when the reject path is built.
 - Two concurrent submits can both call the vision model (the second fails safely with a 409, at the cost of an extra Gemini call). A row lock or a `VERIFYING` state would fix it.
 - Timeouts and connection errors from Gemini are not retried (only 429 and 503 are); the job stays `SUBMITTED` and the cleaner presses retry.
+
+Known gaps in the policy engine work:
+- If `decide()` raises, the job stays `VERIFIED` and `POST /verify` answers 409 (it only accepts `SUBMITTED`), so there is no retry path. Add one (let `/verify` re-run the engine on a `VERIFIED` job) if this shows up.
+- `JobOut.decision` is the latest `POLICY_DECIDED` row, so after an admin approves or denies it still shows the engine's original outcome. Read `status` for the truth; the cleaner page hides the panel when they disagree.
+- The approval endpoint has no auth, and `decided_by` is free text. Add a gate with the admin UI.
+- The mandate is one global row with no way to edit it yet (seed data or the admin UI); `monthly_cap` and `approved_subcontractors` are unused columns.
+- A rejection can list several reasons, including "required item not visible" ones, because every matching rule reports.
+- Photos from a rejected attempt are still attached on a re-clean (see above), and the cleaner job list does not show jobs waiting in `PENDING_APPROVAL`.
 
 Test follow-ups (optional, in priority order):
 - Cover the `app/api/paypal.py` misses (lines 71-78 and 149-161, 84% covered), since that code handles money; also `app/paypal/client.py` lines 94, 151-152 and 159-160.
