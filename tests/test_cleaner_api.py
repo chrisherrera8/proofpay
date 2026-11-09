@@ -5,11 +5,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.audit import verify_chain
+from app.config import get_settings
 from app.db import get_db
 from app.main import app
 from app.models import AuditLog, ChecklistItem, Photo, Verification
 from app.vision import VisionError, get_vision_provider
 from app.vision.base import ItemResult, VisionResult
+from app.vision.gemini import GeminiProvider
 
 JPEG = b"\xff\xd8\xff\xe0" + b"0" * 64
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
@@ -93,17 +95,28 @@ def test_oversized_content_length_is_rejected_before_reading_body(client, make_j
     assert res.status_code == 413
 
 
-def test_upload_rejects_bad_kind_and_wrong_status_and_limit(client, make_job):
+# --- upload validation ---
+
+def test_upload_rejects_unknown_kind(client, make_job):
+    assert _post(client, make_job("AUTHORIZED"), "during").status_code == 422
+
+
+@pytest.mark.parametrize("status", ["BOOKED", "VERIFIED"])
+def test_upload_rejects_non_editable_status(client, make_job, status):
+    assert _post(client, make_job(status), "before").status_code == 409
+
+
+def test_upload_caps_photos_per_kind(client, make_job):
     job = make_job("AUTHORIZED")
-    assert _post(client, job, "during").status_code == 422
-    assert _post(client, make_job("BOOKED"), "before").status_code == 409
-    assert _post(client, make_job("VERIFIED"), "before").status_code == 409
     for _ in range(4):
         assert _post(client, job, "after").status_code == 201
     assert _post(client, job, "after").status_code == 409
-    assert client.post(f"/api/jobs/{job.id}/photos", params={"kind": "before"}, content=JPEG).status_code == 201
-    missing = client.post(f"/api/jobs/{uuid.uuid4()}/photos", params={"kind": "before"}, content=JPEG)
-    assert missing.status_code == 404
+    assert _post(client, job, "before").status_code == 201  # the cap is per kind
+
+
+def test_upload_to_missing_job_is_404(client):
+    r = client.post(f"/api/jobs/{uuid.uuid4()}/photos", params={"kind": "before"}, content=JPEG)
+    assert r.status_code == 404
 
 
 def test_delete_photo(client, db, make_job):
@@ -222,15 +235,22 @@ def test_vision_failure_leaves_job_submitted_and_verify_retries(client, db, make
     assert client.post(f"/api/jobs/{job.id}/verify").status_code == 409
 
 
-def test_missing_api_key_gives_503(db, make_job, monkeypatch):
-    from app.config import get_settings
+# --- vision provider wiring ---
+
+def test_missing_api_key_gives_503(client, db, make_job, monkeypatch):
+    job = _ready(client, make_job, db)
+    del app.dependency_overrides[get_vision_provider]  # use the real provider factory
     monkeypatch.setattr(get_settings(), "gemini_api_key", "")
-    app.dependency_overrides[get_db] = lambda: db
-    try:
-        job = make_job("AUTHORIZED")
-        c = TestClient(app)
-        _post(c, job, "before"); _post(c, job, "after")
-        r = c.post(f"/api/jobs/{job.id}/submit")
-        assert r.status_code == 503
-    finally:
-        app.dependency_overrides.clear()
+    r = client.post(f"/api/jobs/{job.id}/submit")
+    assert r.status_code == 503
+    assert r.json() == {"detail": "Vision check unavailable: GEMINI_API_KEY is not set"}
+    db.refresh(job)
+    assert job.status == "AUTHORIZED"  # nothing happened to the job
+
+
+def test_get_vision_provider_builds_gemini_from_settings(monkeypatch):
+    monkeypatch.setattr(get_settings(), "gemini_api_key", "test-key")
+    provider = get_vision_provider()
+    assert isinstance(provider, GeminiProvider)
+    assert provider.api_key == "test-key"
+    assert provider.model == get_settings().gemini_model
