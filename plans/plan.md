@@ -88,10 +88,10 @@ Spikes 0-5 and the repo scaffold (MIT license) are done (spikes 4 and 5 finished
 | Nov 2 (done) | Spikes 0-3, scaffold with MIT license. |
 | Nov 3 | ~~Spikes 4 and 5~~ (done Nov 4). ~~Models, Alembic, state machine, audit log, booking API, PayPal authorize endpoint~~ (done Nov 4, merged as PR #1; see `plans/finished/nov4-backend-foundation.md`). |
 | Nov 4-5 | ~~Customer site (home with 3 tiers, booking form with validation, PayPal button, confirmation page), CORS, server-side price check, three checklist templates~~ (done Nov 5, PR #2). ~~Deploy: Cloudflare + Render + Neon, live booking verified~~ (done Nov 5, ahead of the Nov 7 row). **Not started:** cleaner upload and vision verification (provider interface). |
-| Nov 6 | ~~Housekeeping: both platforms deploy from `main`~~ (done). ~~Cleaner upload and vision verification~~ (built Nov 6 on `feature/cleaner-and-vision`, not yet merged or deployed; see "Pick up here", step 2). |
-| Nov 7 | Policy engine and mandates, capture and Payouts, webhooks with signature verification, pytest on the policy engine and state machine. |
-| Nov 8 | Admin UI (approvals, audit log), rejection agent (re-clean draft), seed data. |
-| Nov 8-9 | ~~Deploy~~ (done Nov 5). Re-run the full flow on the hosted URLs after the new steps land. README setup instructions, bug fixes, demo rehearsal. |
+| Nov 5 | Policy engine and mandates, capture and Payouts, webhooks with signature verification, pytest on the policy engine and state machine. |
+| Nov 6 | Admin UI (approvals, audit log), rejection agent (re-clean draft), seed data. |
+| Nov 7 | ~~Deploy~~ (done Nov 5). Re-run the full flow on the hosted URLs after the new steps land. |
+| Nov 8 | README setup instructions, bug fixes, demo rehearsal. |
 | Nov 9 | **Freeze.** |
 | Nov 10 | Record the demo video (under 3 minutes) and write the Devpost text. |
 | Nov 11 | Buffer, repo and URL check. |
