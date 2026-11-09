@@ -414,3 +414,93 @@ def test_decide_failure_leaves_job_verified(client, db, make_job, monkeypatch):
     assert "POLICY_DECIDED" not in events(db)
     # /verify only accepts SUBMITTED jobs, so a stuck VERIFIED job is not retryable (known gap).
     assert client.post(f"/api/jobs/{job.id}/verify").status_code == 409
+
+
+# --- approval endpoint ---
+
+def _pending(client, make_job, db):
+    """A $30 job that passed vision, so the policy engine parked it in PENDING_APPROVAL."""
+    job = _ready(client, make_job, db)
+    job.amount = Decimal("30.00")
+    db.commit()
+    assert client.post(f"/api/jobs/{job.id}/submit").json()["status"] == "PENDING_APPROVAL"
+    return job
+
+
+def _approval(client, job, decision="approve", **kw):
+    body = {"decision": decision, "decided_by": "owner", **kw}
+    return client.post(f"/api/jobs/{job.id}/approval", json=body)
+
+
+def test_approve_releases_job(client, db, make_job):
+    job = _pending(client, make_job, db)
+    r = _approval(client, job, reason="Looks fine")
+    assert r.status_code == 200
+    assert r.json()["status"] == "RELEASED"
+    a = db.scalar(select(Approval))
+    assert (a.status, a.decided_by, a.reason) == ("APPROVED", "owner", "Looks fine")
+    assert a.decided_at is not None
+    row = db.scalars(select(AuditLog).order_by(AuditLog.id.desc())).first()
+    assert (row.event, row.actor, row.from_status, row.to_status) == (
+        "APPROVAL_APPROVED", "admin", "PENDING_APPROVAL", "RELEASED")
+    assert row.payload == {"decided_by": "owner", "reason": "Looks fine"}
+    assert verify_chain(db) is None
+
+
+def test_deny_rejects_job_and_cleaner_can_reclean(client, db, make_job):
+    job = _pending(client, make_job, db)
+    r = _approval(client, job, "deny")
+    assert r.json()["status"] == "REJECTED"
+    a = db.scalar(select(Approval))
+    assert (a.status, a.decided_by) == ("DENIED", "owner")
+    assert a.reason is not None  # keeps the policy engine's reason when none is given
+    assert events(db)[-1] == "APPROVAL_DENIED"
+    assert _post(client, job, "after").status_code == 201
+    assert client.post(f"/api/jobs/{job.id}/submit").json()["status"] == "PENDING_APPROVAL"
+    assert verify_chain(db) is None
+
+
+def test_approval_on_job_that_is_not_pending_is_409(client, db, make_job):
+    job = _ready(client, make_job, db)  # AUTHORIZED
+    r = _approval(client, job)
+    assert r.status_code == 409
+    assert "AUTHORIZED" in r.json()["detail"]
+    assert db.scalars(select(Approval)).all() == []
+    assert "APPROVAL_APPROVED" not in events(db)
+
+
+def test_approval_on_unknown_job_is_404(client):
+    assert client.post(f"/api/jobs/{uuid.uuid4()}/approval",
+                       json={"decision": "approve", "decided_by": "owner"}).status_code == 404
+
+
+def test_second_decision_is_409_and_changes_nothing(client, db, make_job):
+    job = _pending(client, make_job, db)
+    assert _approval(client, job, "approve").status_code == 200
+    assert _approval(client, job, "deny").status_code == 409
+    assert _approval(client, job, "approve").status_code == 409
+    db.refresh(job)
+    assert job.status == "RELEASED"
+    assert db.scalar(select(Approval)).status == "APPROVED"
+    assert events(db).count("APPROVAL_APPROVED") == 1
+    assert "APPROVAL_DENIED" not in events(db)
+
+
+@pytest.mark.parametrize("body", [
+    {"decision": "maybe", "decided_by": "owner"},
+    {"decision": "approve"},
+    {"decision": "approve", "decided_by": ""},
+])
+def test_approval_validates_body(client, db, make_job, body):
+    job = _pending(client, make_job, db)
+    assert client.post(f"/api/jobs/{job.id}/approval", json=body).status_code == 422
+    db.refresh(job)
+    assert job.status == "PENDING_APPROVAL"
+
+
+def test_pending_job_without_approval_row_is_409_and_unchanged(client, db, make_job):
+    job = make_job("PENDING_APPROVAL")
+    assert _approval(client, job).status_code == 409
+    db.refresh(job)
+    assert job.status == "PENDING_APPROVAL"
+    assert events(db) == []

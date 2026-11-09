@@ -69,6 +69,12 @@ class DecisionOut(BaseModel):
     reasons: list[str]
 
 
+class ApprovalDecisionIn(BaseModel):
+    decision: Literal["approve", "deny"]
+    decided_by: str = Field(min_length=1, max_length=200)
+    reason: str | None = Field(default=None, max_length=1000)
+
+
 class PhotoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
