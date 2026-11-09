@@ -12,7 +12,7 @@ from app.schemas import JobCreate, JobOut
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
-_LOAD = (selectinload(Job.checklist_items), selectinload(Job.payment), selectinload(Job.verifications))
+JOB_LOAD_OPTIONS = (selectinload(Job.checklist_items), selectinload(Job.payment), selectinload(Job.verifications))
 
 
 @router.post("", response_model=JobOut, status_code=201)
@@ -58,7 +58,7 @@ def list_jobs(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[Job]:
-    stmt = select(Job).options(*_LOAD).order_by(Job.created_at.desc(), Job.id).limit(limit).offset(offset)
+    stmt = select(Job).options(*JOB_LOAD_OPTIONS).order_by(Job.created_at.desc(), Job.id).limit(limit).offset(offset)
     if status:
         stmt = stmt.where(Job.status == status.value)
     return list(db.scalars(stmt))
@@ -66,7 +66,7 @@ def list_jobs(
 
 @router.get("/{job_id}", response_model=JobOut)
 def get_job(job_id: uuid.UUID, db: Session = Depends(get_db)) -> Job:
-    job = db.scalar(select(Job).options(*_LOAD).where(Job.id == job_id))
+    job = db.scalar(select(Job).options(*JOB_LOAD_OPTIONS).where(Job.id == job_id))
     if job is None:
         raise HTTPException(404, "Job not found")
     return job

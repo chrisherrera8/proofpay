@@ -5,8 +5,9 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
+from app.api.jobs import JOB_LOAD_OPTIONS
 from app.audit import append_audit
 from app.db import get_db
 from app.models import Job, JobStatus, Photo, Verification
@@ -35,10 +36,7 @@ def _sniff(data: bytes) -> str | None:
 
 
 def _get_job(db: Session, job_id: uuid.UUID) -> Job:
-    job = db.scalar(
-        select(Job).options(selectinload(Job.checklist_items), selectinload(Job.payment),
-                            selectinload(Job.verifications)).where(Job.id == job_id)
-    )
+    job = db.scalar(select(Job).options(*JOB_LOAD_OPTIONS).where(Job.id == job_id))
     if job is None:
         raise HTTPException(404, "Job not found")
     return job
