@@ -1,5 +1,4 @@
 """Cleaner side: upload before/after photos, submit the job, run the vision check."""
-import logging
 import uuid
 from decimal import Decimal
 
@@ -14,8 +13,6 @@ from app.models import Job, JobStatus, Photo, Verification
 from app.schemas import JobOut, PhotoOut
 from app.state_machine import transition
 from app.vision import ImageInput, VisionError, VisionProvider, get_vision_provider
-
-log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/jobs/{job_id}", tags=["cleaner"])
 
