@@ -10,6 +10,7 @@ from app.api.jobs import JOB_LOAD_OPTIONS
 from app.audit import append_audit
 from app.db import get_db
 from app.models import Job, JobStatus, Photo, Verification
+from app.policy import decide
 from app.schemas import JobOut, PhotoOut
 from app.state_machine import transition
 from app.vision import ImageInput, VisionError, VisionProvider, get_vision_provider
@@ -110,7 +111,11 @@ def delete_photo(job_id: uuid.UUID, photo_id: int, db: Session = Depends(get_db)
 
 
 def _run_verification(db: Session, job: Job, vision: VisionProvider) -> Job:
-    """SUBMITTED -> VERIFIED. The provider call runs outside any row lock; a failure leaves the job SUBMITTED."""
+    """SUBMITTED -> VERIFIED -> the policy engine's decision.
+
+    The provider call runs outside any row lock; a failure leaves the job SUBMITTED. VERIFIED is committed
+    before the engine runs, so if decide() raises the job stays VERIFIED.
+    """
     photos = list(db.scalars(select(Photo).where(Photo.job_id == job.id).order_by(Photo.id)))
     before = [ImageInput(p.data, p.content_type) for p in photos if p.kind == "before"]
     after = [ImageInput(p.data, p.content_type) for p in photos if p.kind == "after"]
@@ -140,6 +145,12 @@ def _run_verification(db: Session, job: Job, vision: VisionProvider) -> Job:
                  "failed_items": [i.item for i in result.items if i.visible and not i.passed]},
     )
     db.commit()
+    try:
+        decide(db, job)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(job)
     return job
 
@@ -150,7 +161,7 @@ def submit(
     db: Session = Depends(get_db),
     vision: VisionProvider = Depends(get_vision_provider),
 ) -> Job:
-    """AUTHORIZED (or REJECTED, for a re-clean) -> SUBMITTED, then run the vision check -> VERIFIED."""
+    """AUTHORIZED (or REJECTED, for a re-clean) -> SUBMITTED, then the vision check -> VERIFIED -> the policy decision."""
     job = _get_job(db, job_id)
     if job.status not in EDITABLE:
         raise HTTPException(409, f"Job is {job.status}; only an AUTHORIZED or REJECTED job can be submitted")

@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,7 +9,7 @@ from app.audit import verify_chain
 from app.config import get_settings
 from app.db import get_db
 from app.main import app
-from app.models import AuditLog, ChecklistItem, Photo, Verification
+from app.models import Approval, AuditLog, ChecklistItem, Photo, Verification
 from app.vision import VisionError, get_vision_provider
 from app.vision.base import ItemResult, VisionResult
 from app.vision.gemini import GeminiProvider
@@ -184,14 +185,16 @@ def test_submit_runs_vision_and_verifies(client, db, make_job, vision):
     r = client.post(f"/api/jobs/{job.id}/submit")
     assert r.status_code == 200
     data = r.json()
-    assert data["status"] == "VERIFIED"
+    assert data["status"] == "RELEASED"  # all items pass at $10, so the policy engine auto-releases
+    assert data["decision"]["outcome"] == "auto_release"
     assert data["verification"]["model"] == "fake-vision"
     assert data["verification"]["score"] == "1.00"
     assert data["verification"]["results"]["overall_pass"] is True
     assert [i["item"] for i in data["verification"]["results"]["items"]] == ["Kitchen", "Bathroom", "Floors", "Surfaces"]
     assert vision.calls == [(1, 1, ["Kitchen", "Bathroom", "Floors", "Surfaces"])]
     events = db.scalars(select(AuditLog.event).order_by(AuditLog.id)).all()
-    assert events == ["PHOTO_UPLOADED", "PHOTO_UPLOADED", "JOB_SUBMITTED", "VERIFICATION_COMPLETED"]
+    assert events == ["PHOTO_UPLOADED", "PHOTO_UPLOADED", "JOB_SUBMITTED", "VERIFICATION_COMPLETED",
+                      "POLICY_DECIDED"]
     assert verify_chain(db) is None
 
 
@@ -200,23 +203,22 @@ def test_reclean_after_rejection_resubmits_and_latest_verification_wins(client, 
     job = _ready(client, make_job, db)
     first = client.post(f"/api/jobs/{job.id}/submit").json()
     assert first["verification"]["results"]["overall_pass"] is False
-
-    # Nothing rejects a job yet (the policy engine comes later), so force it.
-    job.status = "REJECTED"
-    db.commit()
+    assert first["status"] == "REJECTED"
+    assert first["decision"]["outcome"] == "reject"
     assert _post(client, job, "after").status_code == 201  # a REJECTED job is editable again
 
     vision.fail_items = set()
     second = client.post(f"/api/jobs/{job.id}/submit")
     assert second.status_code == 200
-    assert second.json()["status"] == "VERIFIED"
+    assert second.json()["status"] == "RELEASED"
+    assert second.json()["decision"]["outcome"] == "auto_release"
     assert second.json()["verification"]["results"]["overall_pass"] is True
     assert second.json()["verification"]["id"] != first["verification"]["id"]
     assert len(db.scalars(select(Verification)).all()) == 2
     assert client.get(f"/api/jobs/{job.id}").json()["verification"]["id"] == second.json()["verification"]["id"]
     assert events(db) == [
-        "PHOTO_UPLOADED", "PHOTO_UPLOADED", "JOB_SUBMITTED", "VERIFICATION_COMPLETED",
-        "PHOTO_UPLOADED", "JOB_SUBMITTED", "VERIFICATION_COMPLETED",
+        "PHOTO_UPLOADED", "PHOTO_UPLOADED", "JOB_SUBMITTED", "VERIFICATION_COMPLETED", "POLICY_DECIDED",
+        "PHOTO_UPLOADED", "JOB_SUBMITTED", "VERIFICATION_COMPLETED", "POLICY_DECIDED",
     ]
     assert verify_chain(db) is None
 
@@ -227,19 +229,19 @@ def test_list_jobs_includes_latest_verification(client, db, make_job, vision):
     first = client.post(f"/api/jobs/{verified.id}/submit").json()["verification"]
     waiting = make_job("AUTHORIZED")
 
-    # Re-clean: the list must show the newest verification, not the first one.
-    verified.status = "REJECTED"
-    db.commit()
+    # Re-clean (the failed check rejected the job): the list must show the newest verification.
     assert _post(client, verified, "after").status_code == 201
     vision.fail_items = set()
     second = client.post(f"/api/jobs/{verified.id}/submit").json()["verification"]
 
     rows = {r["id"]: r for r in client.get("/api/jobs").json()}
+    assert rows[str(verified.id)]["decision"]["outcome"] == "auto_release"  # latest decision, not the reject
+    assert rows[str(waiting.id)]["decision"] is None
     assert rows[str(verified.id)]["verification"]["id"] == second["id"] != first["id"]
     assert rows[str(verified.id)]["verification"]["results"]["overall_pass"] is True
     assert rows[str(waiting.id)]["verification"] is None
 
-    by_status = client.get("/api/jobs", params={"status": "VERIFIED"}).json()
+    by_status = client.get("/api/jobs", params={"status": "RELEASED"}).json()
     assert [r["id"] for r in by_status] == [str(verified.id)]
     assert by_status[0]["verification"]["id"] == second["id"]
 
@@ -248,7 +250,7 @@ def test_failed_items_recorded(client, db, make_job, vision):
     vision.fail_items = {"Kitchen"}
     job = _ready(client, make_job, db)
     data = client.post(f"/api/jobs/{job.id}/submit").json()
-    assert data["status"] == "VERIFIED"  # the policy engine, not this step, decides what a failure means
+    assert data["status"] == "REJECTED"
     assert data["verification"]["results"]["overall_pass"] is False
 
 
@@ -274,10 +276,13 @@ def test_vision_failure_leaves_job_submitted_and_verify_retries(client, db, make
     db.refresh(job)
     assert job.status == "SUBMITTED"
     assert "VERIFICATION_ERROR" in db.scalars(select(AuditLog.event)).all()
+    assert "POLICY_DECIDED" not in events(db)
+    assert client.get(f"/api/jobs/{job.id}").json()["decision"] is None
 
     vision.error = None
     r = client.post(f"/api/jobs/{job.id}/verify")
-    assert r.status_code == 200 and r.json()["status"] == "VERIFIED"
+    assert r.status_code == 200 and r.json()["status"] == "RELEASED"
+    assert r.json()["decision"]["outcome"] == "auto_release"
     assert client.post(f"/api/jobs/{job.id}/verify").status_code == 409
 
 
@@ -300,3 +305,112 @@ def test_get_vision_provider_builds_gemini_from_settings(monkeypatch):
     assert isinstance(provider, GeminiProvider)
     assert provider.api_key == "test-key"
     assert provider.model == get_settings().gemini_model
+
+
+# --- policy decisions ---
+
+def _decision_events(db):
+    return db.scalars(select(AuditLog).where(AuditLog.event == "POLICY_DECIDED").order_by(AuditLog.id)).all()
+
+
+def test_submit_rejects_when_score_is_under_minimum(client, db, make_job, vision):
+    vision.fail_items = {"Kitchen"}  # 3 of 4 visible items pass -> 0.75 < 0.80
+    job = _ready(client, make_job, db)
+    data = client.post(f"/api/jobs/{job.id}/submit").json()
+    assert data["status"] == "REJECTED"
+    assert data["decision"]["outcome"] == "reject"
+    assert any("below the minimum" in r for r in data["decision"]["reasons"])
+    (row,) = _decision_events(db)
+    assert (row.actor, row.from_status, row.to_status) == ("policy-engine", "VERIFIED", "REJECTED")
+    assert row.payload["rules"]["min_score"] == "0.80"
+    assert db.scalars(select(Approval)).all() == []
+    assert verify_chain(db) is None
+
+
+def test_submit_needs_approval_above_ceiling(client, db, make_job):
+    job = _ready(client, make_job, db)
+    job.amount = Decimal("30.00")
+    db.commit()
+    data = client.post(f"/api/jobs/{job.id}/submit").json()
+    assert data["status"] == "PENDING_APPROVAL"
+    assert data["decision"] == {
+        "outcome": "needs_approval",
+        "reasons": ["Amount $30.00 is above the auto-release ceiling of $25.00"],
+    }
+    approval = db.scalar(select(Approval))
+    assert (approval.job_id, approval.status) == (job.id, "PENDING")
+    assert events(db)[-3:] == ["JOB_SUBMITTED", "VERIFICATION_COMPLETED", "POLICY_DECIDED"]
+    assert verify_chain(db) is None
+
+
+def test_submit_auto_releases_within_rules(client, db, make_job):
+    job = _ready(client, make_job, db)
+    data = client.post(f"/api/jobs/{job.id}/submit").json()
+    assert data["status"] == "RELEASED"
+    assert data["decision"]["outcome"] == "auto_release"
+    assert db.scalars(select(Approval)).all() == []
+    assert verify_chain(db) is None
+
+
+def test_decision_in_detail_and_list_responses(client, db, make_job):
+    job = _ready(client, make_job, db)
+    job.amount = Decimal("30.00")
+    db.commit()
+    client.post(f"/api/jobs/{job.id}/submit")
+    detail = client.get(f"/api/jobs/{job.id}").json()["decision"]
+    listed = {r["id"]: r for r in client.get("/api/jobs").json()}[str(job.id)]["decision"]
+    assert detail == listed
+    assert detail["outcome"] == "needs_approval"
+
+
+def test_list_decisions_do_not_add_a_query_per_job(client, db, make_job):
+    from sqlalchemy import event as sa_event
+
+    for _ in range(3):
+        j = _ready(client, make_job, db)
+        client.post(f"/api/jobs/{j.id}/submit")
+
+    def count_list_queries():
+        n = []
+        listener = lambda *a: n.append(1)  # noqa: E731
+        sa_event.listen(db.get_bind(), "before_cursor_execute", listener)
+        try:
+            assert len(client.get("/api/jobs").json()) >= 3
+        finally:
+            sa_event.remove(db.get_bind(), "before_cursor_execute", listener)
+        return len(n)
+
+    three = count_list_queries()
+    for _ in range(3):
+        j = _ready(client, make_job, db)
+        client.post(f"/api/jobs/{j.id}/submit")
+    assert count_list_queries() == three
+
+
+def test_verify_retry_also_applies_the_policy(client, db, make_job, vision):
+    job = _ready(client, make_job, db)
+    job.amount = Decimal("30.00")
+    db.commit()
+    vision.error = VisionError("Gemini error 503")
+    assert client.post(f"/api/jobs/{job.id}/submit").status_code == 502
+    vision.error = None
+    data = client.post(f"/api/jobs/{job.id}/verify").json()
+    assert data["status"] == "PENDING_APPROVAL"
+    assert len(_decision_events(db)) == 1
+
+
+def test_decide_failure_leaves_job_verified(client, db, make_job, monkeypatch):
+    import app.api.cleaner as cleaner
+
+    def boom(db, job):
+        raise RuntimeError("engine down")
+
+    monkeypatch.setattr(cleaner, "decide", boom)
+    job = _ready(client, make_job, db)
+    with pytest.raises(RuntimeError):
+        client.post(f"/api/jobs/{job.id}/submit")
+    db.refresh(job)
+    assert job.status == "VERIFIED"
+    assert "POLICY_DECIDED" not in events(db)
+    # /verify only accepts SUBMITTED jobs, so a stuck VERIFIED job is not retryable (known gap).
+    assert client.post(f"/api/jobs/{job.id}/verify").status_code == 409
