@@ -50,15 +50,19 @@ def list_photos(job_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Photo]
     return list(db.scalars(select(Photo).where(Photo.job_id == job_id).order_by(Photo.id)))
 
 
+async def _raw_body(request: Request) -> bytes:
+    # Async only to read the body; no DB work here, so the event loop is never blocked on I/O.
+    return await request.body()
+
+
 @router.post("/photos", response_model=PhotoOut, status_code=201)
-async def upload_photo(
+def upload_photo(
     job_id: uuid.UUID,
-    request: Request,
     kind: str = Query(pattern="^(before|after)$"),
+    data: bytes = Depends(_raw_body),
     db: Session = Depends(get_db),
 ) -> Photo:
     """The request body is the raw image bytes (the site sends the resized JPEG blob)."""
-    data = await request.body()
     if not data:
         raise HTTPException(400, "Empty upload")
     if len(data) > MAX_PHOTO_BYTES:
