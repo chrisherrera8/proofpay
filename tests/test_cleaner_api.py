@@ -15,6 +15,7 @@ from app.vision.gemini import GeminiProvider
 
 JPEG = b"\xff\xd8\xff\xe0" + b"0" * 64
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+WEBP = b"RIFF" + b"\x24\x00\x00\x00" + b"WEBP" + b"VP8 " + b"0" * 32
 
 
 class FakeVision:
@@ -77,6 +78,28 @@ def test_upload_stores_photo_and_audits(client, db, make_job):
     assert db.scalars(select(AuditLog.event)).all() == ["PHOTO_UPLOADED"]
     assert client.get(f"/api/jobs/{job.id}/photos/{r.json()['id']}").content == PNG
     assert len(client.get(f"/api/jobs/{job.id}/photos").json()) == 1
+
+
+def test_upload_sniffs_webp(client, db, make_job):
+    r = _post(client, make_job("AUTHORIZED"), "before", WEBP)
+    assert r.status_code == 201
+    assert r.json()["content_type"] == "image/webp"
+    assert db.scalar(select(Photo)).data == WEBP
+
+
+@pytest.mark.parametrize("data", [
+    b"RIFF" + b"\x24\x00\x00\x00" + b"WAVE" + b"fmt " + b"0" * 32,  # RIFF, but audio
+    b"RIFF" + b"\x24\x00\x00\x00" + b"WEB",  # truncated before the type tag
+])
+def test_upload_rejects_non_webp_riff(client, make_job, data):
+    assert _post(client, make_job("AUTHORIZED"), "before", data).status_code == 415
+
+
+def test_upload_trusts_bytes_not_the_content_type_header(client, db, make_job):
+    job = make_job("AUTHORIZED")
+    r = client.post(f"/api/jobs/{job.id}/photos", params={"kind": "before"}, content=WEBP,
+                    headers={"Content-Type": "image/jpeg"})
+    assert r.json()["content_type"] == "image/webp"
 
 
 @pytest.mark.parametrize("data,code", [(b"", 400), (b"not an image", 415), (b"\xff\xd8\xff" + b"0" * (3 * 1024 * 1024), 413)])
