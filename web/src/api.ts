@@ -12,6 +12,12 @@ export interface Job {
   currency: string;
   checklist_items: { id: number; label: string; required: boolean; position: number }[];
   verification: Verification | null;
+  decision: Decision | null;
+}
+
+export interface Decision {
+  outcome: "auto_release" | "needs_approval" | "reject";
+  reasons: string[];
 }
 
 export interface VerificationItem {
