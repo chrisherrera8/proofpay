@@ -2,6 +2,11 @@ import os
 
 # Must run before anything imports app.config: tests only ever touch the "test" schema.
 os.environ["DB_SCHEMA"] = "test"
+# Tests use the local Postgres from docker-compose.yml, never the DATABASE_URL in .env (Neon).
+# Set TEST_DATABASE_URL to point them somewhere else.
+os.environ["DATABASE_URL"] = os.environ.get(
+    "TEST_DATABASE_URL", "postgresql://proofpay:proofpay@localhost:5433/proofpay"
+)
 
 from datetime import datetime, timezone  # noqa: E402
 from decimal import Decimal  # noqa: E402

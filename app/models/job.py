@@ -3,8 +3,8 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, and_, func, select
+from sqlalchemy.orm import Mapped, aliased, mapped_column, relationship
 
 from app.db import Base
 
@@ -50,6 +50,18 @@ class Job(Base):
         back_populates="job", order_by="ChecklistItem.position", cascade="all, delete-orphan"
     )
     payment: Mapped["Payment | None"] = relationship(back_populates="job", uselist=False)  # noqa: F821
+    # Only the newest verification (a re-clean produces a new one), so listing jobs doesn't load every row.
+    verification: Mapped["Verification | None"] = relationship(  # noqa: F821
+        primaryjoin=lambda: _latest_verification_join(), viewonly=True, uselist=False
+    )
+
+
+def _latest_verification_join():
+    from app.models.misc import Verification
+
+    newer = aliased(Verification)
+    latest_id = select(func.max(newer.id)).where(newer.job_id == Job.id).correlate(Job).scalar_subquery()
+    return and_(Verification.job_id == Job.id, Verification.id == latest_id)
 
 
 class ChecklistItem(Base):

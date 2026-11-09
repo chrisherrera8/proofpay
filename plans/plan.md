@@ -101,15 +101,31 @@ Spikes 0-5 and the repo scaffold (MIT license) are done (spikes 4 and 5 finished
 
 ### Pick up here (next session)
 
-Where things stand: booking and authorization work live. The job stops at `AUTHORIZED`; nothing exists yet for the cleaner, the vision check, the policy engine, capture or payout. Do these in order:
+Where things stand (Nov 9): booking, PayPal authorization, cleaner photo upload and vision verification are built. A job now runs `BOOKED → AUTHORIZED → SUBMITTED → VERIFIED` and stops there; nothing exists yet for the policy engine, approvals, capture, payout, webhooks or the admin UI. Do these in order:
 
-1. **Housekeeping (10 min):** repoint Render and Cloudflare to `main`, confirm a deploy, delete `feature/customer-site`. Warm the API before testing (cold start 30-60s).
-2. **Cleaner upload and vision verification:** `/cleaner` page (mobile photo upload, resize to about 1024px client-side), photos stored in Postgres, `POST` submit moves the job `AUTHORIZED → SUBMITTED`, then the vision call (provider interface, default `gemini-3.6-flash`) moves it to `VERIFIED` with per-item results. Needs a Gemini API key in `.env` and on Render.
-3. **Policy engine and mandates:** deterministic Python returning `auto_release`, `needs_approval` or `reject`, with pytest on the engine and the state machine.
+1. ~~**Housekeeping:** repoint Render and Cloudflare to `main`, confirm a deploy, delete `feature/customer-site`.~~ Done Nov 6: both platforms deploy from `main`, and the local `feature/customer-site` branch is deleted (the remote branch is still to delete). Warm the API before testing (cold start 30-60s).
+2. ~~**Cleaner upload and vision verification**~~ Built Nov 6-9 on `feature/cleaner-and-vision` (PR open, not yet merged or deployed; 227 tests pass, 97% line coverage, one live Gemini call matched its label). The `photos` and `verifications` tables already existed in the initial migration, so no new migration. Pieces:
+   - `app/vision/`: `VisionProvider` interface, `GeminiProvider` (REST, retries 429/503 with the told delay capped at 20s), prompt, and `score_answer()`, which decides pass/fail in code (at least one visible item and every visible item passing) and ignores the model's own `overall_pass`/`score`. Model booleans are parsed, not truthy-tested (`"false"` is false), and non-finite confidence becomes 0.
+   - `app/api/cleaner.py`: `POST/GET/DELETE /api/jobs/{id}/photos` (raw image body, `?kind=before|after`, magic-byte check for JPEG/PNG/WebP, 3 MB and 4-per-kind caps), `POST /submit` (`AUTHORIZED|REJECTED → SUBMITTED → VERIFIED`) and `POST /verify` to retry when the vision call fails (the job stays `SUBMITTED`). `JobOut` includes the latest `verification`, also in the list endpoint.
+   - Web: `/cleaner` (job list) and `/cleaner/:jobId` (client-side resize to 1024px, thumbnails, submit, per-item result).
+   - Tests now run against a local Postgres (`docker compose up -d --wait`, then `uv run pytest`; override with `TEST_DATABASE_URL`). Coverage: `uv run pytest --cov=app --cov-report=term-missing`.
+   - **Before merging:** add `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) on Render, then run a hosted end-to-end check.
+3. **Policy engine and mandates:** deterministic Python returning `auto_release`, `needs_approval` or `reject`, with pytest on the engine and the state machine. This is the next thing to build.
 4. **Capture and Payouts, then webhooks** with signature verification (`PAYPAL_WEBHOOK_ID` is in `.env.example`; the webhook URL is the Render API).
 5. **Admin UI** (approvals, audit log) and the rejection agent, then seed data and README setup.
 
-Leftovers that are cheap to do alongside: a void method in the PayPal client (two open sandbox authorizations from testing), a payer-identity check on the authorize route, and the manual Deep/Deluxe/cancel tests. Feature freeze is Nov 9, so cut from the scope-cuts list below if step 2 or 3 runs long.
+Known gaps in the shipped cleaner work (decide when the matching step is built):
+- `/cleaner` and the photo GET endpoints have no auth, and `/cleaner` lists every waiting job. Add this with the admin UI.
+- Photos from an earlier attempt are not cleared on a re-clean. Decide this when the reject path is built.
+- Two concurrent submits can both call the vision model (the second fails safely with a 409, at the cost of an extra Gemini call). A row lock or a `VERIFYING` state would fix it.
+- Timeouts and connection errors from Gemini are not retried (only 429 and 503 are); the job stays `SUBMITTED` and the cleaner presses retry.
+
+Test follow-ups (optional, in priority order):
+- Cover the `app/api/paypal.py` misses (lines 71-78 and 149-161, 84% covered), since that code handles money; also `app/paypal/client.py` lines 94, 151-152 and 159-160.
+- Frontend tests for `CleanerJob`, `CleanerJobs` and `resize.ts`. The web app has no test runner yet (none for the earlier pages either); Vitest with Testing Library would be the choice.
+- Make the `FakeVision` test double subclass the `VisionProvider` protocol, like `FakePayPal` does.
+
+Leftovers that are cheap to do alongside: a void method in the PayPal client (two open sandbox authorizations from testing), a payer-identity check on the authorize route, and the manual Deep/Deluxe/cancel tests. Feature freeze is today (Nov 9), so cut from the scope-cuts list above if the policy engine or payouts run long.
 
 ## 7. Open questions
 

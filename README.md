@@ -22,6 +22,18 @@ Run the API: `uv run uvicorn app.main:app --reload`.
 Run the site: `cd web && cp .env.example .env`, set `VITE_PAYPAL_CLIENT_ID`, then `npm install && npm run dev` (http://localhost:5173).
 For a hosted site, add its URL to `CORS_ORIGINS` on the API.
 
+## Tests
+
+Tests run against a throwaway local Postgres (RAM-backed, about 3 seconds for the whole suite):
+
+```
+docker compose up -d --wait
+uv run pytest
+docker compose down
+```
+
+`tests/conftest.py` ignores `DATABASE_URL` from `.env`; set `TEST_DATABASE_URL` to use a different database.
+
 ## Deploy (free tier)
 
 **API on Render.** New > Blueprint, pick this repo; it reads `render.yaml`. Set the

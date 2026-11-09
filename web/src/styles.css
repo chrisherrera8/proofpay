@@ -32,3 +32,14 @@ body { margin: 0; font-family: system-ui, sans-serif; color: var(--ink); backgro
 .field-error { color: #b3261e; font-size: .8rem; font-weight: 400; }
 .form input[aria-invalid="true"] { border-color: #b3261e; }
 .form input:disabled, .pick:disabled { opacity: .6; cursor: not-allowed; }
+.job-list { display: grid; gap: 12px; }
+.job-row { text-decoration: none; color: inherit; gap: 4px; }
+.photo-slot { margin: 20px 0; }
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.thumb { position: relative; }
+.thumb img { width: 110px; height: 110px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+.thumb button { position: absolute; top: -6px; right: -6px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: #b3261e; color: #fff; font-size: 1rem; cursor: pointer; }
+button.btn { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
+button.btn:disabled { opacity: .5; cursor: not-allowed; }
+.result { margin-top: 24px; padding: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.verdicts { list-style: none; padding: 0; display: grid; gap: 8px; }
