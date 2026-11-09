@@ -2,7 +2,7 @@
 
 Combines idea #1 (proof-of-work payment release for home-service jobs) with idea #3 (agent spend mandates: policy engine, human approvals, audit log) for the PayPal AI Hackathon on Devpost.
 
-Status: spikes 0-5 done (spike 4 vision test and spike 5 docs checks finished Nov 4), repo scaffolded (MIT). Customer site built, deployed and merged to `main` on Nov 5 (PR #2; see `plans/customer-site.md`). Backend foundation merged to `main` on Nov 4 (PR #1): models, Alembic, state machine, hash-chained audit log, booking API, PayPal order and authorize endpoints, 131 tests, one sandbox run. Schedule re-based Nov 2.
+Status: spikes 0-5 done (spike 4 vision test and spike 5 docs checks finished Nov 4), repo scaffolded (MIT). Customer site built, deployed and merged to `main` on Nov 5 (PR #2; see `plans/finished/customer-site.md`). Backend foundation merged to `main` on Nov 4 (PR #1): models, Alembic, state machine, hash-chained audit log, booking API, PayPal order and authorize endpoints, 131 tests, one sandbox run. Schedule re-based Nov 2.
 Deadline: Nov 12, 2026, 12:00pm PST. Feature freeze: Nov 9.
 
 ## 1. PayPal findings
@@ -104,13 +104,13 @@ Spikes 0-5 and the repo scaffold (MIT license) are done (spikes 4 and 5 finished
 Where things stand (Nov 9): booking, PayPal authorization, cleaner photo upload and vision verification are built. A job now runs `BOOKED → AUTHORIZED → SUBMITTED → VERIFIED` and stops there; nothing exists yet for the policy engine, approvals, capture, payout, webhooks or the admin UI. Do these in order:
 
 1. ~~**Housekeeping:** repoint Render and Cloudflare to `main`, confirm a deploy, delete `feature/customer-site`.~~ Done Nov 6: both platforms deploy from `main`, and the local `feature/customer-site` branch is deleted (the remote branch is still to delete). Warm the API before testing (cold start 30-60s).
-2. ~~**Cleaner upload and vision verification**~~ Built Nov 6-9 on `feature/cleaner-and-vision` (PR open, not yet merged or deployed; 227 tests pass, 97% line coverage, one live Gemini call matched its label). The `photos` and `verifications` tables already existed in the initial migration, so no new migration. Pieces:
+2. ~~**Cleaner upload and vision verification**~~ Built Nov 6-9 on `feature/cleaner-and-vision` (merged as PR #3 on Nov 9; 227 tests pass, 97% line coverage, one live Gemini call matched its label). The `photos` and `verifications` tables already existed in the initial migration, so no new migration. Pieces:
    - `app/vision/`: `VisionProvider` interface, `GeminiProvider` (REST, retries 429/503 with the told delay capped at 20s), prompt, and `score_answer()`, which decides pass/fail in code (at least one visible item and every visible item passing) and ignores the model's own `overall_pass`/`score`. Model booleans are parsed, not truthy-tested (`"false"` is false), and non-finite confidence becomes 0.
    - `app/api/cleaner.py`: `POST/GET/DELETE /api/jobs/{id}/photos` (raw image body, `?kind=before|after`, magic-byte check for JPEG/PNG/WebP, 3 MB and 4-per-kind caps), `POST /submit` (`AUTHORIZED|REJECTED → SUBMITTED → VERIFIED`) and `POST /verify` to retry when the vision call fails (the job stays `SUBMITTED`). `JobOut` includes the latest `verification`, also in the list endpoint.
    - Web: `/cleaner` (job list) and `/cleaner/:jobId` (client-side resize to 1024px, thumbnails, submit, per-item result).
    - Tests now run against a local Postgres (`docker compose up -d --wait`, then `uv run pytest`; override with `TEST_DATABASE_URL`). Coverage: `uv run pytest --cov=app --cov-report=term-missing`.
    - **Before merging:** add `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) on Render, then run a hosted end-to-end check.
-3. **Policy engine and mandates:** deterministic Python returning `auto_release`, `needs_approval` or `reject`, with pytest on the engine and the state machine. This is the next thing to build.
+3. **Policy engine and mandates:** deterministic Python returning `auto_release`, `needs_approval` or `reject`, with pytest on the engine and the state machine. This is the next thing to build. Plan: `plans/policy-engine.md` (branch `feature/policy-engine`).
 4. **Capture and Payouts, then webhooks** with signature verification (`PAYPAL_WEBHOOK_ID` is in `.env.example`; the webhook URL is the Render API).
 5. **Admin UI** (approvals, audit log) and the rejection agent, then seed data and README setup.
 
