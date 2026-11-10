@@ -89,7 +89,7 @@ Spikes 0-5 and the repo scaffold (MIT license) are done (spikes 4 and 5 finished
 |---|---|
 | Nov 2 (done) | Spikes 0-3, scaffold with MIT license. |
 | Nov 3 | ~~Spikes 4 and 5~~ (done Nov 4). ~~Models, Alembic, state machine, audit log, booking API, PayPal authorize endpoint~~ (done Nov 4, merged as PR #1; see `plans/finished/nov4-backend-foundation.md`). |
-| Nov 4-5 | ~~Customer site (home with 3 tiers, booking form with validation, PayPal button, confirmation page), CORS, server-side price check, three checklist templates~~ (done Nov 5, PR #2). ~~Deploy: Cloudflare + Render + Neon, live booking verified~~ (done Nov 5, ahead of the Nov 7 row). **Not started:** cleaner upload and vision verification (provider interface). |
+| Nov 4-5 | ~~Customer site (home with 3 tiers, booking form with validation, PayPal button, confirmation page), CORS, server-side price check, three checklist templates~~ (done Nov 5, PR #2). ~~Deploy: Cloudflare + Render + Neon, live booking verified~~ (done Nov 5, ahead of the Nov 7 row). ~~Cleaner upload and vision verification (provider interface)~~ (done Nov 9, PR #3). |
 | Nov 5 | ~~Policy engine and mandates~~ (done Nov 9, PR #4), capture and Payouts, webhooks with signature verification, pytest on the policy engine and state machine. |
 | Nov 6 | Admin UI (approvals, audit log), rejection agent (re-clean draft), seed data. |
 | Nov 7 | ~~Deploy~~ (done Nov 5). Re-run the full flow on the hosted URLs after the new steps land. |
@@ -111,7 +111,7 @@ Where things stand (Nov 9): booking, PayPal authorization, cleaner photo upload,
    - `app/api/cleaner.py`: `POST/GET/DELETE /api/jobs/{id}/photos` (raw image body, `?kind=before|after`, magic-byte check for JPEG/PNG/WebP, 3 MB and 4-per-kind caps), `POST /submit` (`AUTHORIZED|REJECTED → SUBMITTED → VERIFIED`) and `POST /verify` to retry when the vision call fails (the job stays `SUBMITTED`). `JobOut` includes the latest `verification`, also in the list endpoint.
    - Web: `/cleaner` (job list) and `/cleaner/:jobId` (client-side resize to 1024px, thumbnails, submit, per-item result).
    - Tests now run against a local Postgres (`docker compose up -d --wait`, then `uv run pytest`; override with `TEST_DATABASE_URL`). Coverage: `uv run pytest --cov=app --cov-report=term-missing`.
-   - **Before merging:** add `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) on Render, then run a hosted end-to-end check.
+   - Hosted check done Nov 9: `GEMINI_API_KEY` is set on Render and a Basic job went from photos to `RELEASED` on the deployed site (`gemini-3.6-flash`, score 1.0).
 3. ~~**Policy engine and mandates**~~ Built Nov 9 on `feature/policy-engine` (plan: `plans/finished/policy-engine.md`; 273 tests pass). Pieces:
    - `app/policy.py`: pure `evaluate()` (seven ordered rules; the first match sets the outcome and every matching rule adds a reason), `DEFAULT_RULES` (min score 0.80, auto-release ceiling $25.00, no required items), `get_mandate(db)` (newest `mandates` row, a NULL column falls back to its default) and `decide(db, job)`, which moves `VERIFIED` to `RELEASED`, `PENDING_APPROVAL` or `REJECTED` with a `POLICY_DECIDED` audit row (outcome, reasons, rules in force, verification id) and a PENDING `Approval` for `needs_approval`. No migration.
    - `/submit` and `/verify` call `decide()` after `VERIFIED` is committed. `JobOut.decision` (outcome and reasons) comes from the latest `POLICY_DECIDED` audit row, eager-loaded, also in the list endpoint.
