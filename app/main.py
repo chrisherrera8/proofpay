@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import approvals, cleaner, cleaners, jobs, paypal, webhooks
+from app.api import approvals, cleaner, cleaners, jobs, maintenance, paypal, webhooks
 from app.cleaners import ensure_default_cleaner
 from app.config import get_settings
 from app.db import SessionLocal
@@ -37,6 +37,7 @@ app.include_router(jobs.router)
 app.include_router(paypal.router)
 app.include_router(cleaner.router)
 app.include_router(cleaners.router)
+app.include_router(maintenance.router)
 app.include_router(approvals.router)
 app.include_router(webhooks.router)
 

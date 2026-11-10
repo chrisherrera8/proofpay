@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.cleaners import ensure_default_cleaner, get_active_cleaner, list_cleaners
+from app.cleaners import ensure_default_cleaner, get_active_cleaner, list_cleaners, purge_if_due
 from app.db import get_db
 from app.models import Cleaner
 from app.schemas import CleanerAvailability, CleanerCreate, CleanerOut
@@ -27,7 +27,9 @@ def roster(
     available: bool = Query(False, description="Only cleaners who are free that day"),
     db: Session = Depends(get_db),
 ) -> list[dict]:
-    """Active cleaners with `available` for `date`. The default cleaner is (re)created here if it is missing."""
+    """Active cleaners with `available` for `date`. Also purges expired cleaners (at most once a minute) and
+    (re)creates the default cleaner if it is missing."""
+    purge_if_due(db)
     ensure_default_cleaner(db)
     return [
         {"id": c.id, "name": c.name, "is_seed": c.is_seed, "created_at": c.created_at, "available": free}

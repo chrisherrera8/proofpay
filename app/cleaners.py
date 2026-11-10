@@ -1,15 +1,23 @@
 """Cleaner rules: who is still around, who is free on a date, and the permanent default cleaner."""
 import datetime as dt
+import logging
+import threading
+import time
 import uuid
 
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, delete, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.audit import append_audit
 from app.config import DEFAULT_CLEANER_NAME, get_settings
-from app.models import Cleaner, Job, JobStatus
+from app.models import Cleaner, Job, JobStatus, Photo
+
+log = logging.getLogger(__name__)
 
 CLEANER_TTL = dt.timedelta(hours=24)
+# The roster endpoint purges as a side effect (Render's free tier has no cron), at most this often per process.
+PURGE_EVERY_SECONDS = 60
 # A job that never got authorized stops holding its cleaner for the day after this long.
 UNPAID_HOLD = dt.timedelta(minutes=30)
 
@@ -86,3 +94,43 @@ def ensure_default_cleaner(db: Session) -> Cleaner | None:
         cleaner.name, cleaner.paypal_email = name, email
         db.commit()
     return cleaner
+
+
+def purge_expired(db: Session) -> dict[str, int]:
+    """Scrub expired cleaners: delete their rows and the photos of their jobs, and set jobs.cleaner_id to NULL.
+
+    Jobs and audit rows stay, so the hash chain is never touched. Audit rows hold cleaner ids but no names or
+    emails. The default cleaner never expires. Idempotent; writes one count-only audit row only when it deleted
+    something. Commits.
+    """
+    expired = select(Cleaner.id).where(~Cleaner.is_seed, ~active_cleaner_filter())
+    photos = db.execute(
+        delete(Photo).where(Photo.job_id.in_(select(Job.id).where(Job.cleaner_id.in_(expired))))
+    ).rowcount
+    # RETURNING, so a concurrent purge that got there first is not counted twice. The FK sets jobs.cleaner_id NULL.
+    cleaners = len(db.execute(delete(Cleaner).where(Cleaner.id.in_(expired)).returning(Cleaner.id)).all())
+    if cleaners:
+        append_audit(db, job_id=None, actor="system", event="CLEANERS_PURGED",
+                     payload={"cleaners": cleaners, "photos": photos})
+    db.commit()
+    return {"cleaners": cleaners, "photos": photos}
+
+
+_last_purge = 0.0
+_purge_lock = threading.Lock()
+
+
+def purge_if_due(db: Session) -> None:
+    """purge_expired() at most once a minute per process. A failure is logged, never raised: the caller is a
+    request that has nothing to do with the purge."""
+    global _last_purge
+    with _purge_lock:
+        now = time.monotonic()
+        if _last_purge and now - _last_purge < PURGE_EVERY_SECONDS:
+            return
+        _last_purge = now
+    try:
+        purge_expired(db)
+    except Exception:
+        db.rollback()
+        log.exception("Purging expired cleaners failed")

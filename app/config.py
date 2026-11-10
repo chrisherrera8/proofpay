@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     # The one permanent demo cleaner: paid at paypal_cleaner_email, shown under default_cleaner_name.
     paypal_cleaner_email: str = ""
     default_cleaner_name: str = DEFAULT_CLEANER_NAME
+    # Bearer token for POST /api/maintenance/purge (an external pinger). Unset = the endpoint answers 503.
+    maintenance_token: str = ""
 
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.6-flash"
