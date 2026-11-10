@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { CalendarDays, Camera, ChevronLeft, CircleCheck, CircleMinus, CircleX, Clock, Loader2, Plus, RotateCcw, Unlock, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Page } from "@/components/layout";
+import { JobTimeline } from "@/components/job-timeline";
+import { SectionCard } from "@/components/section-card";
+import { ErrorAlert, PageSkeleton } from "@/components/states";
+import { StatusBadge } from "@/components/status-badge";
+import { formatMoney, formatWhen } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { deletePhoto, getJob, Job, listPhotos, Photo, photoUrl, settleJob, submitJob, uploadPhoto, verifyJob } from "../api";
 import { resizeImage } from "../resize";
 
@@ -43,27 +52,47 @@ function PhotoSlot({ jobId, kind, photos, locked, onChange, onError }: {
     onChange();
   }
 
+  const label = kind === "before" ? "Before" : "After";
+  const canAdd = !locked && mine.length < MAX_PER_KIND;
   return (
-    <div className="photo-slot">
-      <h3>{kind === "before" ? "Before" : "After"} photos</h3>
-      <div className="thumbs">
-        {mine.map((p) => (
-          <div key={p.id} className="thumb">
-            <img src={photoUrl(jobId, p.id)} alt={`${kind} photo`} />
-            {!locked && <button type="button" aria-label="Remove photo" onClick={() => remove(p.id)}>×</button>}
-          </div>
+    <SectionCard
+      title={`${label} photos`}
+      action={<span className="text-sm text-muted-foreground tabular-nums">{mine.length}/{MAX_PER_KIND}</span>}
+    >
+      <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+        {mine.map((p, n) => (
+          <li key={p.id} className="relative aspect-square">
+            <img src={photoUrl(jobId, p.id)} alt={`${label} photo ${n + 1}`} className="size-full rounded-lg border object-cover" />
+            {!locked && (
+              <button
+                type="button"
+                aria-label={`Remove ${kind} photo ${n + 1}`}
+                onClick={() => remove(p.id)}
+                className="absolute -top-2 -right-2 flex size-8 items-center justify-center rounded-full border bg-card text-destructive shadow-xs outline-none hover:bg-danger focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            )}
+          </li>
         ))}
-      </div>
-      {!locked && mine.length < MAX_PER_KIND && (
-        <>
-          <input ref={input} type="file" accept="image/*" capture="environment" multiple hidden
-            onChange={(e) => pick(e.target.files)} />
-          <button type="button" className="btn small" disabled={busy} onClick={() => input.current?.click()}>
-            {busy ? "Uploading…" : mine.length ? "Add another" : `Take or choose ${kind} photo`}
-          </button>
-        </>
-      )}
-    </div>
+        {canAdd && (
+          <li className="aspect-square">
+            <input ref={input} type="file" accept="image/*" capture="environment" multiple hidden
+              onChange={(e) => pick(e.target.files)} />
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => input.current?.click()}
+              className="flex size-full flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-input/60 bg-muted/50 p-2 text-center text-xs font-medium text-muted-foreground transition-colors outline-none hover:border-primary hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-wait"
+            >
+              {busy ? <Loader2 className="size-5 animate-spin" aria-hidden /> : mine.length ? <Plus className="size-5" aria-hidden /> : <Camera className="size-5" aria-hidden />}
+              {busy ? "Uploading…" : mine.length ? "Add photo" : `Take ${kind} photo`}
+            </button>
+          </li>
+        )}
+      </ul>
+      {mine.length === 0 && locked && <p className="text-sm text-muted-foreground">No photos.</p>}
+    </SectionCard>
   );
 }
 
@@ -73,9 +102,9 @@ const PAYMENT_STATUSES = ["RELEASED", "CAPTURED", "PAID_OUT"];
 // What each policy outcome means for the job's status. The reasons are only shown while the job is still
 // in a state the decision put it in (after an admin approves, the stored decision is stale).
 const DECISION_VIEW = {
-  auto_release: { statuses: PAYMENT_STATUSES, title: "✅ Released" },
-  needs_approval: { statuses: ["PENDING_APPROVAL"], title: "⏳ Waiting for approval" },
-  reject: { statuses: ["REJECTED"], title: "❌ Rejected: please re-clean" },
+  auto_release: { statuses: PAYMENT_STATUSES, title: "Released for payment", icon: Unlock, tone: "success" },
+  needs_approval: { statuses: ["PENDING_APPROVAL"], title: "Waiting for a manager to approve", icon: Clock, tone: "warning" },
+  reject: { statuses: ["REJECTED"], title: "Re-clean needed", icon: RotateCcw, tone: "danger" },
 } as const;
 
 function DecisionPanel({ job }: { job: Job }) {
@@ -83,13 +112,20 @@ function DecisionPanel({ job }: { job: Job }) {
   if (!d) return null;
   const view = DECISION_VIEW[d.outcome];
   if (!(view.statuses as readonly string[]).includes(job.status)) return null;
+  const Icon = view.icon;
   return (
-    <div className="result" role="status">
-      <h3>{view.title}</h3>
-      <ul>{d.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+    <div role="status" className={cn("rounded-xl border p-5", TONE_PANEL[view.tone])}>
+      <p className="flex items-center gap-2 font-semibold"><Icon className="size-5" aria-hidden /> {view.title}</p>
+      <ul className="mt-2 grid list-disc gap-1 pl-7 text-sm">{d.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
     </div>
   );
 }
+
+const TONE_PANEL = {
+  success: "border-success-foreground/20 bg-success text-success-foreground",
+  warning: "border-warning-foreground/20 bg-warning text-warning-foreground",
+  danger: "border-destructive/20 bg-danger text-destructive",
+} as const;
 
 // Retry makes sense until the payout has failed: settle does nothing for a FAILED payout.
 function canRetryPayment(job: Job): boolean {
@@ -100,25 +136,39 @@ function canRetryPayment(job: Job): boolean {
 function PaymentPanel({ job, working, onRetry }: { job: Job; working: boolean; onRetry: () => void }) {
   if (!PAYMENT_STATUSES.includes(job.status)) return null;
   const failed = job.status === "CAPTURED" && job.payout?.status === "FAILED";
-  let message: string;
+  let title: string;
+  let detail: string;
   if (job.status === "PAID_OUT") {
-    message = `💸 Paid $${job.payout?.amount ?? job.amount} to your PayPal`;
+    title = `${formatMoney(job.payout?.amount ?? job.amount, job.currency)} paid to your PayPal`;
+    detail = "The payout has arrived. Nice work.";
   } else if (failed) {
-    message = "⚠️ Payout failed, needs attention";
+    title = "Payout failed";
+    detail = "PayPal couldn't send your payout. It needs a look from the team.";
   } else if (job.status === "CAPTURED") {
-    message = "💳 Payment captured, payout on the way";
+    title = "Payout on the way";
+    detail = "The customer has been charged; PayPal usually sends the payout within a minute.";
   } else {
-    message = "⏳ Payment not captured yet";
+    title = "Payment not collected yet";
+    detail = "The work is approved but the customer's payment hasn't been captured.";
   }
   return (
-    <div className="result" role="status">
-      <h3>{message}</h3>
+    <SectionCard title="Payment">
+      <div role="status" className="flex items-start gap-3">
+        <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg", job.status === "PAID_OUT" ? "bg-success text-success-foreground" : failed ? "bg-danger text-destructive" : "bg-accent text-accent-foreground")}>
+          {job.status === "PAID_OUT" ? <CircleCheck className="size-5" aria-hidden /> : failed ? <CircleX className="size-5" aria-hidden /> : <Clock className="size-5" aria-hidden />}
+        </span>
+        <div>
+          <p className="font-semibold tabular-nums">{title}</p>
+          <p className="text-sm text-muted-foreground">{detail}</p>
+        </div>
+      </div>
       {canRetryPayment(job) && (
-        <button className="btn small" disabled={working} onClick={onRetry}>
+        <Button variant="outline" size="lg" className="mt-4 h-11 w-full sm:w-auto" disabled={working} onClick={onRetry}>
+          {working ? <Loader2 className="animate-spin" aria-hidden /> : <RotateCcw aria-hidden />}
           {working ? "Retrying…" : "Retry payment"}
-        </button>
+        </Button>
       )}
-    </div>
+    </SectionCard>
   );
 }
 
@@ -161,55 +211,92 @@ export default function CleanerJob() {
     }
   }
 
-  if (!job) return <section className="section narrow">{error ? <p className="error">{error}</p> : <p>Loading…</p>}</section>;
+  if (!job) return error ? <Page><ErrorAlert message={error} /></Page> : <PageSkeleton label="Loading job" />;
 
   const editable = job.status === "AUTHORIZED" || job.status === "REJECTED";
   const ready = photos.some((p) => p.kind === "before") && photos.some((p) => p.kind === "after");
   const v = job.verification;
 
   return (
-    <section className="section narrow">
-      <Link to="/cleaner" className="muted">← All jobs</Link>
-      <h2>{job.address}</h2>
-      <p className="muted">{new Date(job.scheduled_at).toLocaleString()} · Status: <strong>{job.status}</strong></p>
+    <Page>
+      <Link to="/cleaner" className="inline-flex items-center gap-1 rounded text-sm text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
+        <ChevronLeft className="size-4" aria-hidden /> All jobs
+      </Link>
+      <div className="mt-3 flex flex-col gap-3">
+        <StatusBadge status={job.status} />
+        <h1 className="text-2xl font-semibold sm:text-3xl">{job.address}</h1>
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <CalendarDays className="size-4" aria-hidden /> {formatWhen(job.scheduled_at)}
+        </p>
+      </div>
 
-      <h3>Checklist</h3>
-      <ul>{job.checklist_items.map((i) => <li key={i.id}>{i.label}</li>)}</ul>
+      <div className="mt-8 grid gap-6">
+        <DecisionPanel job={job} />
+        <PaymentPanel job={job} working={working} onRetry={() => run(settleJob)} />
 
-      {editable && <p className="muted">Take a before photo, clean, then take an after photo that shows the rooms on the checklist.</p>}
-      <PhotoSlot jobId={jobId} kind="before" photos={photos} locked={!editable} onChange={refresh} onError={setError} />
-      <PhotoSlot jobId={jobId} kind="after" photos={photos} locked={!editable} onChange={refresh} onError={setError} />
+        {v && (
+          <SectionCard
+            title={v.results.overall_pass ? "Checks passed" : "Some items need attention"}
+            action={<span className="text-sm text-muted-foreground tabular-nums">Score {v.score ?? "–"}</span>}
+          >
+            <ul className="grid divide-y">
+              {v.results.items.map((i) => {
+                const Icon = !i.visible ? CircleMinus : i.pass ? CircleCheck : CircleX;
+                const verdict = !i.visible ? "Not visible" : i.pass ? "Passed" : "Failed";
+                return (
+                  <li key={i.item} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+                    <Icon className={cn("mt-0.5 size-5 shrink-0", !i.visible ? "text-muted-foreground" : i.pass ? "text-success-foreground" : "text-destructive")} aria-hidden />
+                    <div>
+                      <p className="text-sm font-medium">{i.item} <span className="sr-only">: {verdict}</span></p>
+                      <p className="text-sm text-muted-foreground">{i.visible ? i.note : "Not visible in the after photos"}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">Checked by {v.model}</p>
+          </SectionCard>
+        )}
 
-      {error && <p className="error" role="alert">{error}</p>}
-
-      {editable && (
-        <button className="btn" disabled={!ready || working} onClick={() => run(submitJob)}>
-          {working ? "Checking the photos…" : "Submit for verification"}
-        </button>
-      )}
-      {job.status === "SUBMITTED" && (
-        <button className="btn" disabled={working} onClick={() => run(verifyJob)}>
-          {working ? "Checking the photos…" : "Retry verification"}
-        </button>
-      )}
-
-      <DecisionPanel job={job} />
-      <PaymentPanel job={job} working={working} onRetry={() => run(settleJob)} />
-
-      {v && (
-        <div className="result">
-          <h3>{v.results.overall_pass ? "✅ Checks passed" : "⚠️ Some items need attention"}</h3>
-          <p className="muted">Score {v.score} · {v.model}</p>
-          <ul className="verdicts">
-            {v.results.items.map((i) => (
-              <li key={i.item}>
-                <strong>{!i.visible ? "➖" : i.pass ? "✅" : "❌"} {i.item}</strong>
-                <span className="muted"> {i.visible ? i.note : "Not visible in the after photos"}</span>
+        <SectionCard title="Checklist">
+          {editable && <p className="-mt-2 mb-3 text-sm text-muted-foreground">Take a before photo, clean, then take after photos that show each item below.</p>}
+          <ul className="grid gap-2 text-sm">
+            {job.checklist_items.map((i) => (
+              <li key={i.id} className="flex items-center gap-3">
+                <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+                {i.label}
+                {i.required && <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Required</span>}
               </li>
             ))}
           </ul>
-        </div>
-      )}
-    </section>
+        </SectionCard>
+
+        <PhotoSlot jobId={jobId} kind="before" photos={photos} locked={!editable} onChange={refresh} onError={setError} />
+        <PhotoSlot jobId={jobId} kind="after" photos={photos} locked={!editable} onChange={refresh} onError={setError} />
+
+        {error && <ErrorAlert message={error} />}
+
+        {(editable || job.status === "SUBMITTED") && (
+          <div>
+            {editable ? (
+              <Button size="lg" className="h-12 w-full text-base" disabled={!ready || working} onClick={() => run(submitJob)}>
+                {working && <Loader2 className="animate-spin" aria-hidden />}
+                {working ? "Checking the photos…" : "Submit for verification"}
+              </Button>
+            ) : (
+              <Button size="lg" className="h-12 w-full text-base" disabled={working} onClick={() => run(verifyJob)}>
+                {working ? <Loader2 className="animate-spin" aria-hidden /> : <RotateCcw aria-hidden />}
+                {working ? "Checking the photos…" : "Retry verification"}
+              </Button>
+            )}
+            {editable && !ready && <p className="mt-2 text-center text-sm text-muted-foreground">Add at least one before and one after photo.</p>}
+          </div>
+        )}
+
+        <SectionCard title="Progress">
+          <JobTimeline status={job.status} />
+        </SectionCard>
+      </div>
+    </Page>
   );
 }
