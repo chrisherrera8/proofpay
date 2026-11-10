@@ -196,3 +196,16 @@ def test_two_simultaneous_bookings_for_one_cleaner_and_day_only_one_wins(monkeyp
         with engine.begin() as conn:  # TRUNCATE skips the append-only row trigger, like conftest does
             assert conn.execute(text("SELECT current_schema()")).scalar() == "test"
             conn.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+
+
+def test_job_out_shows_cleaner_name_and_null_after_purge(client, db, make_cleaner):
+    c = make_cleaner("Dana")
+    job_id = client.post("/api/jobs", json=body(c)).json()["id"]
+    assert client.get(f"/api/jobs/{job_id}").json()["cleaner_name"] == "Dana"
+    assert client.get(f"/api/jobs?cleaner_id={c.id}").json()[0]["cleaner_name"] == "Dana"
+
+    db.delete(c)
+    db.commit()
+    db.expire_all()
+    out = client.get(f"/api/jobs/{job_id}").json()
+    assert out["cleaner_id"] is None and out["cleaner_name"] is None

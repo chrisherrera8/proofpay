@@ -131,6 +131,7 @@ class JobOut(BaseModel):
     authorized_at: datetime | None
     created_at: datetime
     cleaner_id: uuid.UUID | None = None
+    cleaner_name: str | None = None
     service_date: date | None = None
     checklist_items: list[ChecklistItemOut]
     payment: PaymentSummary | None

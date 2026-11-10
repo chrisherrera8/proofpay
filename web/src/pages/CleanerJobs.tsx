@@ -1,28 +1,46 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { CalendarDays, ChevronRight, Inbox } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Page } from "@/components/layout";
 import { ErrorAlert } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
-import { formatWhen } from "@/lib/format";
-import { Job, listJobs } from "../api";
+import { clearCleanerId, getCleanerId } from "@/lib/cleaner-session";
+import { formatDay } from "@/lib/format";
+import { ApiError, Cleaner, getCleaner, Job, listJobs } from "../api";
 import { tierById } from "../tiers";
 
 export default function CleanerJobs() {
+  const navigate = useNavigate();
+  const cleanerId = getCleanerId();
+  const [cleaner, setCleaner] = useState<Cleaner | null>(null);
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!cleanerId) return;
+    // An expired cleaner is a 404: forget the id and send them to sign up again.
+    getCleaner(cleanerId)
+      .then(setCleaner)
+      .catch((e) => {
+        if (e instanceof ApiError && e.status === 404) {
+          clearCleanerId();
+          navigate("/cleaner/signup", { replace: true, state: { expired: true } });
+        } else {
+          setError(e.message);
+        }
+      });
     // AUTHORIZED = paid-for and waiting for the cleaner; REJECTED = needs a re-clean.
-    Promise.all([listJobs("AUTHORIZED"), listJobs("REJECTED")])
+    Promise.all([listJobs("AUTHORIZED", cleanerId), listJobs("REJECTED", cleanerId)])
       .then(([a, r]) => setJobs([...r, ...a]))
       .catch((e) => setError(e.message));
-  }, []);
+  }, [cleanerId, navigate]);
+
+  if (!cleanerId) return <Navigate to="/cleaner/signup" replace />;
 
   return (
     <Page>
-      <h1 className="text-3xl font-semibold">Your jobs</h1>
+      <h1 className="text-3xl font-semibold">{cleaner ? `${cleaner.name}'s jobs` : "Your jobs"}</h1>
       <p className="mt-2 text-muted-foreground">Jobs waiting for before and after photos. Re-cleans are listed first.</p>
 
       <div className="mt-8">
@@ -55,7 +73,7 @@ export default function CleanerJobs() {
                     <p className="mt-1 truncate text-sm">{j.address}</p>
                     <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
                       <CalendarDays className="size-4" aria-hidden />
-                      {formatWhen(j.scheduled_at)}
+                      {j.service_date ? formatDay(j.service_date) : "Date to be confirmed"}
                     </p>
                   </div>
                   <ChevronRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
@@ -65,6 +83,16 @@ export default function CleanerJobs() {
           </ul>
         )}
       </div>
+      <p className="mt-8 text-sm text-muted-foreground">
+        Not you?{" "}
+        <Link
+          to="/cleaner/signup"
+          onClick={clearCleanerId}
+          className="rounded underline underline-offset-2 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          Switch cleaner
+        </Link>
+      </p>
     </Page>
   );
 }

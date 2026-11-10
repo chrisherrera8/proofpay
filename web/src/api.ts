@@ -8,6 +8,9 @@ export interface Job {
   address: string;
   service_type: string;
   scheduled_at: string;
+  service_date: string | null; // YYYY-MM-DD
+  cleaner_id: string | null;
+  cleaner_name: string | null; // null once the cleaner's data was deleted
   amount: string;
   currency: string;
   checklist_items: { id: number; label: string; required: boolean; position: number }[];
@@ -46,7 +49,22 @@ export interface Photo {
   kind: "before" | "after";
 }
 
-export class ApiError extends Error {}
+export interface Cleaner {
+  id: string;
+  name: string;
+  is_seed: boolean;
+  created_at: string;
+}
+
+export interface CleanerAvailability extends Cleaner {
+  available: boolean;
+}
+
+export class ApiError extends Error {
+  constructor(message: string, readonly status?: number) {
+    super(message);
+  }
+}
 
 // FastAPI sends 422 details as a list of {loc, msg}; turn that into one readable line.
 function describe(detail: unknown, fallback: string): string {
@@ -73,7 +91,7 @@ async function request<T>(path: string, init?: RequestInit, contentType = "appli
     } catch {
       /* no JSON body */
     }
-    throw new ApiError(describe(detail, `Something went wrong (${res.status}). Please try again.`));
+    throw new ApiError(describe(detail, `Something went wrong (${res.status}). Please try again.`), res.status);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -84,7 +102,8 @@ export const createJob = (body: {
   customer_email: string;
   address: string;
   service_type: string;
-  scheduled_at: string;
+  cleaner_id: string;
+  service_date: string; // YYYY-MM-DD
   amount: number;
 }) => request<Job>("/api/jobs", { method: "POST", body: JSON.stringify(body) });
 
@@ -99,7 +118,16 @@ export const authorize = (jobId: string, orderId: string) =>
 
 export const getJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}`);
 
-export const listJobs = (status: string) => request<Job[]>(`/api/jobs?status=${encodeURIComponent(status)}`);
+export const listJobs = (status: string, cleanerId?: string) =>
+  request<Job[]>(`/api/jobs?status=${encodeURIComponent(status)}${cleanerId ? `&cleaner_id=${encodeURIComponent(cleanerId)}` : ""}`);
+
+export const signUp = (body: { name: string; paypal_email: string }) =>
+  request<Cleaner>("/api/cleaners", { method: "POST", body: JSON.stringify(body) });
+
+export const listCleaners = (date: string) =>
+  request<CleanerAvailability[]>(`/api/cleaners?date=${encodeURIComponent(date)}`);
+
+export const getCleaner = (id: string) => request<Cleaner>(`/api/cleaners/${encodeURIComponent(id)}`);
 
 export const listPhotos = (jobId: string) => request<Photo[]>(`/api/jobs/${jobId}/photos`);
 

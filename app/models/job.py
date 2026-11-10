@@ -67,6 +67,11 @@ class Job(Base):
     )
 
     @property
+    def cleaner_name(self) -> str | None:
+        """The booked cleaner's name, or None once their data was deleted. Never written to the audit log."""
+        return self.cleaner.name if self.cleaner else None
+
+    @property
     def decision(self) -> dict | None:
         """{outcome, reasons} from the latest POLICY_DECIDED audit row, or None before a decision."""
         event = self.decision_event

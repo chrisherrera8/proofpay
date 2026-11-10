@@ -7,7 +7,7 @@ import { JobTimeline } from "@/components/job-timeline";
 import { SectionCard } from "@/components/section-card";
 import { ErrorAlert, PageSkeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
-import { formatMoney, formatWhen } from "@/lib/format";
+import { formatDay, formatMoney, formatWhen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { deletePhoto, getJob, Job, listPhotos, Photo, photoUrl, settleJob, submitJob, uploadPhoto, verifyJob } from "../api";
 import { resizeImage } from "../resize";
@@ -226,7 +226,7 @@ export default function CleanerJob() {
         <StatusBadge status={job.status} />
         <h1 className="text-2xl font-semibold sm:text-3xl">{job.address}</h1>
         <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <CalendarDays className="size-4" aria-hidden /> {formatWhen(job.scheduled_at)}
+          <CalendarDays className="size-4" aria-hidden /> {job.service_date ? formatDay(job.service_date) : formatWhen(job.scheduled_at)}
         </p>
       </div>
 

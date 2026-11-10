@@ -2,7 +2,7 @@
 
 Step 5 of `plans/plan.md`. Branch: `feature/cleaner-signup`.
 
-**Status (Nov 10):** backend done (steps 1-4 below, 4 commits, 397 tests pass, nothing pushed or merged). **Web, seed/README and the hosted check are left.** The booking page on this branch is broken against the new API until the web step lands, so do not merge to `main` before then. Start with "Pick up here" at the bottom.
+**Status (Nov 10):** backend done (steps 1-4 below, 4 commits, 397 tests pass, nothing pushed or merged). **Web is done (uncommitted at the time of writing; `JobOut` gained `cleaner_name`). README and the hosted check are left.** Start with "Pick up here" at the bottom.
 
 Commits on `feature/cleaner-signup`: `f4ea70f` cleaners table and API, `1b7968c` booking with a cleaner, `631927e` pay the booked cleaner, `af5bb01` 24-hour purge.
 
@@ -53,7 +53,7 @@ New `cleaners` table: `id` (uuid), `name`, `paypal_email` (NOT NULL), `is_seed` 
 
 `purge_expired(db)` deletes photos for jobs of expired non-seed cleaners, nulls `cleaner_id`, deletes the cleaners, and writes one `CLEANERS_PURGED` audit row (count only). `POST /api/maintenance/purge` behind a bearer token (503 if unset, like the webhook id). Tests: only expired non-seed rows go, jobs and audit rows survive, `verify_chain()` still passes, idempotent.
 
-### 6. Web (on the new components) — NOT STARTED
+### 6. Web (on the new components) — DONE (tsc, build, 390/1280 screenshots with mocked API; default cleaner reachable via "Continue as Sparkle Crew" on the sign-up page)
 
 - `/cleaner/signup`: name and PayPal email, with a note that the email should be a PayPal sandbox account and that data is deleted after 24 hours. On success store the id and go to `/cleaner`.
 - `/cleaner`: shows the signed-in cleaner's name and jobs only; no id in storage sends them to sign-up; a 404 from an expired cleaner clears storage and sends them to sign-up.
