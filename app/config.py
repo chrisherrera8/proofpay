@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     paypal_client_secret: str = ""
     paypal_base_url: str = "https://api-m.sandbox.paypal.com"
 
+    paypal_webhook_id: str = ""
+    paypal_cleaner_email: str = ""
+
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.6-flash"
 
