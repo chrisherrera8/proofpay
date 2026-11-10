@@ -57,6 +57,8 @@ class Job(Base):
     verification: Mapped["Verification | None"] = relationship(  # noqa: F821
         primaryjoin=lambda: _latest_verification_join(), viewonly=True, uselist=False
     )
+    # The booked cleaner; None for old jobs and after the cleaner's data was deleted.
+    cleaner: Mapped["Cleaner | None"] = relationship(viewonly=True)  # noqa: F821
     # One payout per job (unique job_id), eager-loaded so listing jobs needs no per-job query.
     payout: Mapped["Payout | None"] = relationship(viewonly=True, uselist=False)  # noqa: F821
     # The newest POLICY_DECIDED audit row, loaded the same way, so the API can show the decision.

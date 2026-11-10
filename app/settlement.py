@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.audit import append_audit
-from app.config import get_settings
+from app.cleaners import resolve_payee
 from app.models import AuditLog, Job, JobStatus, Payment, Payout
 from app.paypal.client import PayPalClient, PayPalError
 from app.state_machine import InvalidTransition, transition
@@ -133,10 +133,12 @@ def _capture(db: Session, job: Job, paypal: PayPalClient) -> bool:
 
 
 def _create_payout(db: Session, job: Job, paypal: PayPalClient) -> None:
-    email = get_settings().paypal_cleaner_email
-    if not email:
-        _audit_and_commit(db, job, "PAYOUT_ERROR", {"reason": "PAYPAL_CLEANER_EMAIL is not set"})
+    payee = resolve_payee(job)
+    if payee is None:
+        _audit_and_commit(db, job, "PAYOUT_ERROR",
+                          {"reason": "The job has no cleaner and PAYPAL_CLEANER_EMAIL is not set"})
         return
+    email, payee_kind = payee
     try:
         batch = paypal.create_payout(job.id, email, job.amount, job.currency)
     except PayPalError as exc:
@@ -147,7 +149,9 @@ def _create_payout(db: Session, job: Job, paypal: PayPalClient) -> None:
         db.add(Payout(job_id=job.id, batch_id=batch.batch_id, amount=job.amount,
                       status=PAYOUT_PENDING))
         append_audit(db, job_id=job.id, actor="system", event="PAYOUT_CREATED",
-                     payload={"batch_id": batch.batch_id, "receiver": email,
+                     # No email here: the log is append-only, so a cleaner's data could never be scrubbed from it.
+                     payload={"batch_id": batch.batch_id, "payee": payee_kind,
+                              "cleaner_id": job.cleaner.id if job.cleaner else None,
                               "amount": job.amount, "currency": job.currency})
         db.commit()
     except IntegrityError:

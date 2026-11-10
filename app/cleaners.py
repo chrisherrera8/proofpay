@@ -51,6 +51,18 @@ def list_cleaners(db: Session, date: dt.date) -> list[tuple[Cleaner, bool]]:
     return [(c, bool(free)) for c, free in rows]
 
 
+def resolve_payee(job: Job) -> tuple[str, str] | None:
+    """(PayPal email, "cleaner" | "default") for the job's payout, or None if there is nowhere to send it.
+
+    The booked cleaner is paid. If the job has none (an old job, or the cleaner's data was deleted after 24 hours),
+    the default PAYPAL_CLEANER_EMAIL is paid instead.
+    """
+    if job.cleaner is not None:
+        return job.cleaner.paypal_email, "cleaner"
+    fallback = get_settings().paypal_cleaner_email.strip()
+    return (fallback, "default") if fallback else None
+
+
 def ensure_default_cleaner(db: Session) -> Cleaner | None:
     """Create or update the one permanent cleaner from PAYPAL_CLEANER_EMAIL and DEFAULT_CLEANER_NAME.
 
