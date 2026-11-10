@@ -34,9 +34,7 @@ def settle(db: Session, job: Job, paypal: PayPalClient) -> Job:
             return job
         status = JobStatus.CAPTURED
     if status is JobStatus.CAPTURED:
-        payout = db.scalar(
-            select(Payout).where(Payout.job_id == job.id).order_by(Payout.id.desc()).limit(1)
-        )
+        payout = db.scalar(select(Payout).where(Payout.job_id == job.id))  # job_id is unique
         if payout is None:
             _create_payout(db, job, paypal)
         elif payout.status == PAYOUT_PENDING:
@@ -46,6 +44,19 @@ def settle(db: Session, job: Job, paypal: PayPalClient) -> Job:
             # be claimed), and there is one payout per job. A human has to look.
             log.warning("Job %s payout batch %s is FAILED; not retrying", job.id, payout.batch_id)
     return job
+
+
+def settle_after_release(db: Session, job: Job, paypal: PayPalClient) -> None:
+    """Best-effort settle for the routes that just released a job. A failure here must not turn the
+    decision that already committed into an error response, so it is logged and swallowed; the job stays
+    RELEASED/CAPTURED and POST /settle retries. The caller returns the job as it now stands."""
+    try:
+        settle(db, job, paypal)
+    except Exception:
+        log.exception("Settling job %s failed after release", job.id)
+        db.rollback()
+    db.refresh(job)
+    db.expire(job, ["payout", "payment"])
 
 
 def mark_paid(db: Session, payout: Payout) -> None:

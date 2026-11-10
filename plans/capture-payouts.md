@@ -49,11 +49,11 @@ One function that does the next missing step for a job and returns:
 
 `mark_paid(db, payout)` is the shared helper: `Payout.status = "SUCCESS"`, `transition(CAPTURED → PAID_OUT)` with actor `paypal`, event `PAYOUT_SUCCEEDED`.
 
-### 3. Hook it in (next)
+### 3. Hook it in (done Nov 9)
 
 - After the commit that leaves a job `RELEASED` in `/submit` and `/verify` (`app/api/cleaner.py`) and in `POST /approval` (approve only; `app/api/approvals.py`), call `settle()`. A settle failure must not turn a successful decision into an error response: the response still returns the job, in whatever status it reached. `settle` re-raises DB failures (after logging the PayPal ids), so each hook wraps the call in `try/except Exception` that does `log.exception(...)` and `db.rollback()`. The manual `/settle` endpoint does not swallow, so whoever clicked sees the failure.
-- `POST /api/jobs/{id}/settle` runs the same function by hand: 404 for an unknown job, 409 if the job isn't `RELEASED` or `CAPTURED`.
-- `JobOut` gains `payout` (`amount`, `status`) from the newest payout row, eager-loaded like `verification`, so the list endpoint stays free of per-job queries.
+- `POST /api/jobs/{id}/settle` runs the same function by hand: 404 for an unknown job, 409 if the job isn't `RELEASED`, `CAPTURED` or `PAID_OUT`. A `PAID_OUT` job is returned as is (200, no PayPal calls), so a double click or stale retry button isn't an error.
+- `JobOut` gains `payout` (`amount`, `status`) from the job's one payout row (`payouts.job_id` is unique), eager-loaded like `verification`, so the list endpoint stays free of per-job queries.
 
 ### 4. Webhook endpoint (to do)
 
@@ -68,7 +68,9 @@ Registering the webhook is manual: add the Render API URL (`/api/webhooks/paypal
 
 ### 5. Web (small) (to do)
 
-On `/cleaner/:jobId`, show payment progress under the decision panel when the job is `CAPTURED` or `PAID_OUT`: "Payment captured, payout on the way" and "Paid $10.00 to your PayPal". A "Retry payment" button when the job is `RELEASED`, or `CAPTURED` with a payout that is not `FAILED`, calls `/settle`. For a `FAILED` payout `settle` does nothing (it only logs), so hide the button there and show "Payout failed, needs attention" instead. This needs the job API response to expose the latest payout's status; add it in this step. `npx tsc --noEmit` must pass.
+On `/cleaner/:jobId`, show payment progress under the decision panel when the job is `CAPTURED` or `PAID_OUT`: "Payment captured, payout on the way" and "Paid $10.00 to your PayPal". A "Retry payment" button when the job is `RELEASED`, or `CAPTURED` with a payout that is not `FAILED`, calls `/settle`. For a `FAILED` payout `settle` does nothing (it only logs), so hide the button there and show "Payout failed, needs attention" instead. This needs the job API response to expose the payout's status (`JobOut.payout` is done in step 3; add it to the web `Job` type here). `npx tsc --noEmit` must pass.
+
+**Known gap from step 3:** auto-release now ends `CAPTURED` in the same request, but `DecisionPanel` in `web/src/pages/CleanerJob.tsx` only shows the `auto_release` decision while the job is `RELEASED`. Until this step lands, a cleaner whose job passes sees no result panel. Fix it here: show the decision panel for `auto_release` while the job is `RELEASED`, `CAPTURED` or `PAID_OUT`, and also after an admin approval (`needs_approval` decision, job now past `PENDING_APPROVAL`) show the payment progress instead of nothing.
 
 ## Tests
 
@@ -84,8 +86,8 @@ On `/cleaner/:jobId`, show payment progress under the decision panel when the jo
 
 1. ~~Client methods and `FakePayPal`, with client tests.~~ (done Nov 9)
 2. ~~`settle()`, `mark_paid()` and config, with DB tests.~~ (done Nov 9, review fixes included)
-3. **Next:** hook into `/submit`, `/verify` and `/approval`, add `/settle` and `JobOut.payout`, fix the old `RELEASED` assertions.
-4. Webhook endpoint and tests.
+3. ~~Hook into `/submit`, `/verify` and `/approval`, add `/settle` and `JobOut.payout`, fix the old `RELEASED` assertions.~~ (done Nov 9)
+4. **Next:** webhook endpoint and tests.
 5. Small web change, then the manual sandbox run.
 
 Each step is one commit, reviewed before the next.

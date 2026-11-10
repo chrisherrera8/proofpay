@@ -10,8 +10,10 @@ from app.api.jobs import JOB_LOAD_OPTIONS
 from app.audit import append_audit
 from app.db import get_db
 from app.models import Job, JobStatus, Photo, Verification
+from app.paypal.client import PayPalClient, get_paypal_client
 from app.policy import decide
 from app.schemas import JobOut, PhotoOut
+from app.settlement import settle, settle_after_release
 from app.state_machine import transition
 from app.vision import ImageInput, VisionError, VisionProvider, get_vision_provider
 
@@ -110,11 +112,12 @@ def delete_photo(job_id: uuid.UUID, photo_id: int, db: Session = Depends(get_db)
     return Response(status_code=204)
 
 
-def _run_verification(db: Session, job: Job, vision: VisionProvider) -> Job:
+def _run_verification(db: Session, job: Job, vision: VisionProvider, paypal: PayPalClient) -> Job:
     """SUBMITTED -> VERIFIED -> the policy engine's decision.
 
     The provider call runs outside any row lock; a failure leaves the job SUBMITTED. VERIFIED is committed
-    before the engine runs, so if decide() raises the job stays VERIFIED.
+    before the engine runs, so if decide() raises the job stays VERIFIED. A RELEASED job then goes straight on
+    to capture and payout; if PayPal fails the decision still stands and /settle retries.
     """
     photos = list(db.scalars(select(Photo).where(Photo.job_id == job.id).order_by(Photo.id)))
     before = [ImageInput(p.data, p.content_type) for p in photos if p.kind == "before"]
@@ -152,6 +155,8 @@ def _run_verification(db: Session, job: Job, vision: VisionProvider) -> Job:
         db.rollback()
         raise
     db.refresh(job)
+    if job.status == JobStatus.RELEASED.value:
+        settle_after_release(db, job, paypal)
     return job
 
 
@@ -160,6 +165,7 @@ def submit(
     job_id: uuid.UUID,
     db: Session = Depends(get_db),
     vision: VisionProvider = Depends(get_vision_provider),
+    paypal: PayPalClient = Depends(get_paypal_client),
 ) -> Job:
     """AUTHORIZED (or REJECTED, for a re-clean) -> SUBMITTED, then the vision check -> VERIFIED -> the policy decision."""
     job = _get_job(db, job_id)
@@ -171,7 +177,7 @@ def submit(
 
     transition(db, job, JobStatus.SUBMITTED, actor="cleaner", event="JOB_SUBMITTED")
     db.commit()
-    return _run_verification(db, job, vision)
+    return _run_verification(db, job, vision, paypal)
 
 
 @router.post("/verify", response_model=JobOut)
@@ -179,9 +185,31 @@ def verify(
     job_id: uuid.UUID,
     db: Session = Depends(get_db),
     vision: VisionProvider = Depends(get_vision_provider),
+    paypal: PayPalClient = Depends(get_paypal_client),
 ) -> Job:
     """Retry the vision check for a job stuck in SUBMITTED (the provider failed on submit)."""
     job = _get_job(db, job_id)
     if job.status != JobStatus.SUBMITTED.value:
         raise HTTPException(409, f"Job is {job.status}; only a SUBMITTED job can be verified")
-    return _run_verification(db, job, vision)
+    return _run_verification(db, job, vision, paypal)
+
+
+@router.post("/settle", response_model=JobOut)
+def settle_job(
+    job_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    paypal: PayPalClient = Depends(get_paypal_client),
+) -> Job:
+    """Retry the money steps (capture, payout, paid check) for a RELEASED or CAPTURED job.
+
+    A PAID_OUT job has nothing left to do and is returned as is, so a double click or a stale retry button
+    isn't an error. Unlike the automatic call this does not swallow failures: the person who clicked should
+    see them.
+    """
+    job = _get_job(db, job_id)
+    if job.status not in (JobStatus.RELEASED.value, JobStatus.CAPTURED.value, JobStatus.PAID_OUT.value):
+        raise HTTPException(409, f"Job is {job.status}; only a RELEASED, CAPTURED or PAID_OUT job can be settled")
+    settle(db, job, paypal)
+    db.refresh(job)
+    db.expire(job, ["payout", "payment"])
+    return job
