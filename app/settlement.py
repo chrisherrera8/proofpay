@@ -19,6 +19,8 @@ from app.state_machine import InvalidTransition, transition
 
 log = logging.getLogger(__name__)
 
+PAYMENT_CAPTURED = "CAPTURED"
+
 PAYOUT_PENDING = "PENDING"
 PAYOUT_SUCCESS = "SUCCESS"
 PAYOUT_FAILED = "FAILED"
@@ -55,7 +57,7 @@ def mark_paid(db: Session, payout: Payout) -> None:
     payout.status = PAYOUT_SUCCESS
 
 
-def _error(db: Session, job: Job, event: str, payload: dict) -> None:
+def _audit_and_commit(db: Session, job: Job, event: str, payload: dict) -> None:
     append_audit(db, job_id=job.id, actor="system", event=event, payload=payload)
     db.commit()
 
@@ -64,18 +66,18 @@ def _capture(db: Session, job: Job, paypal: PayPalClient) -> bool:
     """Capture the authorization. True when the job is now CAPTURED."""
     payment = db.scalar(select(Payment).where(Payment.job_id == job.id))
     if payment is None or not payment.authorization_id:
-        _error(db, job, "CAPTURE_ERROR", {"reason": "no authorization on record"})
+        _audit_and_commit(db, job, "CAPTURE_ERROR", {"reason": "no authorization on record"})
         return False
     try:
         capture = paypal.capture_authorization(payment.authorization_id, job.amount, job.currency)
     except PayPalError as exc:
-        _error(db, job, "CAPTURE_ERROR", {
+        _audit_and_commit(db, job, "CAPTURE_ERROR", {
             "authorization_id": payment.authorization_id,
             "http_status": exc.status_code, "debug_id": exc.debug_id,
         })
         return False
     if capture.status != "COMPLETED" or not capture.id:
-        _error(db, job, "CAPTURE_ERROR", {
+        _audit_and_commit(db, job, "CAPTURE_ERROR", {
             "authorization_id": payment.authorization_id,
             "capture_status": capture.status, "debug_id": capture.debug_id,
         })
@@ -87,7 +89,7 @@ def _capture(db: Session, job: Job, paypal: PayPalClient) -> bool:
                             "amount": job.amount, "currency": job.currency,
                             "debug_id": capture.debug_id})
         payment.capture_id = capture.id
-        payment.status = "CAPTURED"
+        payment.status = PAYMENT_CAPTURED
         db.commit()
     except InvalidTransition:
         # A concurrent settle already recorded this capture (PayPal returned the same capture to both).
@@ -109,16 +111,17 @@ def _capture(db: Session, job: Job, paypal: PayPalClient) -> bool:
 def _create_payout(db: Session, job: Job, paypal: PayPalClient) -> None:
     email = get_settings().paypal_cleaner_email
     if not email:
-        _error(db, job, "PAYOUT_ERROR", {"reason": "PAYPAL_CLEANER_EMAIL is not set"})
+        _audit_and_commit(db, job, "PAYOUT_ERROR", {"reason": "PAYPAL_CLEANER_EMAIL is not set"})
         return
     try:
         batch = paypal.create_payout(job.id, email, job.amount, job.currency)
     except PayPalError as exc:
-        _error(db, job, "PAYOUT_ERROR", {"http_status": exc.status_code, "debug_id": exc.debug_id})
+        _audit_and_commit(db, job, "PAYOUT_ERROR",
+                          {"http_status": exc.status_code, "debug_id": exc.debug_id})
         return
     try:
-        db.add(Payout(job_id=job.id, batch_id=batch.batch_id, item_id=batch.item_id,
-                      amount=job.amount, status=PAYOUT_PENDING))
+        db.add(Payout(job_id=job.id, batch_id=batch.batch_id, amount=job.amount,
+                      status=PAYOUT_PENDING))
         append_audit(db, job_id=job.id, actor="system", event="PAYOUT_CREATED",
                      payload={"batch_id": batch.batch_id, "receiver": email,
                               "amount": job.amount, "currency": job.currency})
