@@ -49,6 +49,17 @@ serves `dist` as a single-page app, so wrangler needs no auto-detection. Add the
 variables `VITE_API_URL` (the Render URL, no trailing slash), `VITE_PAYPAL_CLIENT_ID`
 (sandbox client ID) and `NODE_VERSION` (22). Variables are baked in at build time, so redeploy after changing them.
 
+**Cleaners.** Cleaners sign up at `/cleaner/signup` with a name and a PayPal *sandbox* email; customers pick a free cleaner for a whole day when booking, and the payout goes to that cleaner. Cleaner data (row and photos) is deleted 24 hours after sign-up; jobs and the audit log stay. Extra Render variables for this:
+
+| Variable | Needed | Purpose |
+|---|---|---|
+| `PAYPAL_CLEANER_EMAIL` | yes | Sandbox account that receives payouts for the permanent default cleaner and any job whose cleaner was already deleted. Unset = no default cleaner, so the booking page is empty until someone signs up. |
+| `PAYPAL_WEBHOOK_ID` | yes | ID from registering the webhook in the PayPal developer dashboard (unset = webhooks refused). |
+| `DEFAULT_CLEANER_NAME` | no | Display name of the default cleaner (default `Sparkle Crew`). |
+| `MAINTENANCE_TOKEN` | no | Enables `POST /api/maintenance/purge` (`Authorization: Bearer <token>`). Without it expired data is still deleted lazily whenever the cleaner list is loaded; the token only lets an external pinger (e.g. a scheduled GitHub Action) do it on a timer. |
+
+The default cleaner is created at startup, so no seed script is needed.
+
 If you change `CORS_ORIGINS` or `VITE_API_URL`, redeploy the matching service.
 
 ## Warning: PayPal authorization honor period
