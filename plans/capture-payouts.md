@@ -55,14 +55,14 @@ One function that does the next missing step for a job and returns:
 - `POST /api/jobs/{id}/settle` runs the same function by hand: 404 for an unknown job, 409 if the job isn't `RELEASED`, `CAPTURED` or `PAID_OUT`. A `PAID_OUT` job is returned as is (200, no PayPal calls), so a double click or stale retry button isn't an error.
 - `JobOut` gains `payout` (`amount`, `status`) from the job's one payout row (`payouts.job_id` is unique), eager-loaded like `verification`, so the list endpoint stays free of per-job queries.
 
-### 4. Webhook endpoint (to do)
+### 4. Webhook endpoint (done Nov 9)
 
 `POST /api/webhooks/paypal` (`app/api/webhooks.py`):
 
 1. Read the raw body, verify the signature with the client. Invalid: 400. `PAYPAL_WEBHOOK_ID` not set: 503.
 2. `PAYMENT.PAYOUTS-ITEM.SUCCEEDED`: find the payout by `payout_batch_id` (the batch id is on every payout event) and call `mark_paid()`. Already `PAID_OUT`: return 200 and do nothing (PayPal retries deliveries).
 3. `PAYMENT.PAYOUTS-ITEM.FAILED`, `UNCLAIMED`, `RETURNED`, `BLOCKED`: set the payout row `FAILED` and write a `PAYOUT_FAILED` audit row. The job stays `CAPTURED` (the customer was charged and the cleaner was not paid, so a human has to look; the admin UI shows it later).
-4. Everything else (capture, authorization and order events): 200, ignored. Always answer 200 for events we understand or ignore so PayPal doesn't keep retrying.
+4. Everything else (capture, authorization and order events): 200, ignored. Always answer 200 for events we understand or ignore so PayPal doesn't keep retrying. **As built:** a payout event whose `payout_batch_id` matches no payout row returns 404 (not 200), so PayPal redelivers if the webhook beat our commit of the payout row; `/settle` polling is the fallback. A malformed body is 400. A `RETURNED` event after the payout already succeeded marks the payout `FAILED` and audits it, but the job stays `PAID_OUT`.
 
 Registering the webhook is manual: add the Render API URL (`/api/webhooks/paypal`) in the PayPal developer dashboard, subscribe to the payout item events, and set `PAYPAL_WEBHOOK_ID` on Render. Add `paypal_webhook_id` and `paypal_cleaner_email` to `app/config.py`.
 
@@ -87,8 +87,8 @@ On `/cleaner/:jobId`, show payment progress under the decision panel when the jo
 1. ~~Client methods and `FakePayPal`, with client tests.~~ (done Nov 9)
 2. ~~`settle()`, `mark_paid()` and config, with DB tests.~~ (done Nov 9, review fixes included)
 3. ~~Hook into `/submit`, `/verify` and `/approval`, add `/settle` and `JobOut.payout`, fix the old `RELEASED` assertions.~~ (done Nov 9)
-4. **Next:** webhook endpoint and tests.
-5. Small web change, then the manual sandbox run.
+4. ~~Webhook endpoint and tests.~~ (done Nov 9; `PAYPAL_WEBHOOK_ID` and `PAYPAL_CLEANER_EMAIL` are set on Render)
+5. **Next:** small web change, then the manual sandbox run (deploy this branch to Render first).
 
 Each step is one commit, reviewed before the next.
 
