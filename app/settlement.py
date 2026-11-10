@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import append_audit
 from app.config import get_settings
-from app.models import Job, JobStatus, Payment, Payout
+from app.models import AuditLog, Job, JobStatus, Payment, Payout
 from app.paypal.client import PayPalClient, PayPalError
 from app.state_machine import InvalidTransition, transition
 
@@ -58,8 +58,21 @@ def mark_paid(db: Session, payout: Payout) -> None:
 
 
 def _audit_and_commit(db: Session, job: Job, event: str, payload: dict) -> None:
+    """Write a system audit row and commit. Skips the write when the job's newest audit row is the same
+    event with the same payload (ignoring PayPal's per-response debug_id), so repeated failing retries
+    don't fill the log. The first row keeps its debug_id for support requests."""
+    last = db.scalar(
+        select(AuditLog).where(AuditLog.job_id == job.id).order_by(AuditLog.id.desc()).limit(1)
+    )
+    if last is not None and last.event == event and _without_debug_id(last.payload) == \
+            _without_debug_id(payload):
+        return
     append_audit(db, job_id=job.id, actor="system", event=event, payload=payload)
     db.commit()
+
+
+def _without_debug_id(payload: dict) -> dict:
+    return {k: v for k, v in payload.items() if k != "debug_id"}
 
 
 def _capture(db: Session, job: Job, paypal: PayPalClient) -> bool:
@@ -145,6 +158,9 @@ def _poll_payout(db: Session, job: Job, payout: Payout, paypal: PayPalClient) ->
         batch = paypal.get_payout_batch(payout.batch_id)
     except PayPalError as exc:
         log.warning("Polling payout batch %s failed: %r", payout.batch_id, exc)
+        _audit_and_commit(db, job, "PAYOUT_POLL_ERROR", {
+            "batch_id": payout.batch_id, "http_status": exc.status_code, "debug_id": exc.debug_id,
+        })
         return
     if batch.item_status != "SUCCESS":
         return

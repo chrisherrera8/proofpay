@@ -194,6 +194,40 @@ def test_missing_authorization_is_a_capture_error(db, released, paypal):
     assert paypal.capture_calls == []
 
 
+# --- duplicate error rows ---
+
+def test_repeated_identical_error_is_audited_once_even_if_debug_id_differs(db, released, paypal):
+    job = released()
+    for n in range(3):
+        paypal.capture_error = PayPalError("boom", status_code=500, debug_id=f"d{n}")
+        settle(db, job, paypal)
+    assert events(db) == ["CAPTURE_ERROR"]
+    first = db.scalars(select(AuditLog)).first()
+    assert first.payload["debug_id"] == "d0"  # the first debug id is the one kept
+
+
+def test_different_error_is_audited_again(db, released, paypal):
+    job = released()
+    paypal.capture_error = PayPalError("boom", status_code=500, debug_id="d1")
+    settle(db, job, paypal)
+    paypal.capture_error = PayPalError("nope", status_code=422, debug_id="d2")
+    settle(db, job, paypal)
+    assert events(db) == ["CAPTURE_ERROR", "CAPTURE_ERROR"]
+
+
+def test_same_error_after_an_intervening_row_is_audited_again(db, released, paypal):
+    job = released()
+    err = PayPalError("boom", status_code=500, debug_id="d1")
+    paypal.batch_error = err
+    paypal.payout_error = err
+    settle(db, job, paypal)  # captured, PAYOUT_ERROR
+    paypal.payout_error = None
+    settle(db, job, paypal)  # PAYOUT_CREATED resets the dedupe
+    settle(db, job, paypal)  # poll fails
+    settle(db, job, paypal)  # poll fails again: deduped
+    assert events(db) == ["CAPTURE_COMPLETED", "PAYOUT_ERROR", "PAYOUT_CREATED", "PAYOUT_POLL_ERROR"]
+
+
 # --- payout ---
 
 def test_payout_error_leaves_captured_without_row_and_retry_succeeds(db, released, paypal):
@@ -299,13 +333,18 @@ def test_polling_with_item_still_pending_changes_nothing(db, released, paypal):
     assert payouts(db)[0].status == "PENDING"
 
 
-def test_polling_error_changes_nothing(db, released, paypal):
+def test_polling_error_changes_nothing_but_is_audited(db, released, paypal):
     job = released()
     settle(db, job, paypal)
-    paypal.batch_error = PayPalError("boom")
+    paypal.batch_error = PayPalError("boom", status_code=503, debug_id="pd1")
     settle(db, job, paypal)
     db.refresh(job)
     assert job.status == "CAPTURED"
+    assert payouts(db)[0].status == "PENDING"
+    assert events(db) == ["CAPTURE_COMPLETED", "PAYOUT_CREATED", "PAYOUT_POLL_ERROR"]
+    row = db.scalars(select(AuditLog).order_by(AuditLog.id.desc())).first()
+    assert row.payload == {"batch_id": "BATCH1", "http_status": 503, "debug_id": "pd1"}
+    assert verify_chain(db) is None
 
 
 def test_settling_a_job_whose_payout_failed_does_nothing(db, released, paypal, caplog):

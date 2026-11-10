@@ -51,7 +51,7 @@ One function that does the next missing step for a job and returns:
 
 ### 3. Hook it in
 
-- After the commit that leaves a job `RELEASED` in `/submit` and `/verify` (`app/api/cleaner.py`) and in `POST /approval` (approve only; `app/api/approvals.py`), call `settle()`. A settle failure must not turn a successful decision into an error response: the response still returns the job, in whatever status it reached.
+- After the commit that leaves a job `RELEASED` in `/submit` and `/verify` (`app/api/cleaner.py`) and in `POST /approval` (approve only; `app/api/approvals.py`), call `settle()`. A settle failure must not turn a successful decision into an error response: the response still returns the job, in whatever status it reached. `settle` re-raises DB failures (after logging the PayPal ids), so each hook wraps the call in `try/except Exception` that does `log.exception(...)` and `db.rollback()`. The manual `/settle` endpoint does not swallow, so whoever clicked sees the failure.
 - `POST /api/jobs/{id}/settle` runs the same function by hand: 404 for an unknown job, 409 if the job isn't `RELEASED` or `CAPTURED`.
 - `JobOut` gains `payout` (`amount`, `status`) from the newest payout row, eager-loaded like `verification`, so the list endpoint stays free of per-job queries.
 
