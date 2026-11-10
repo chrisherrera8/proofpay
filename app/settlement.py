@@ -8,13 +8,14 @@ lock; transition() locks the job only for the write.
 import logging
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.audit import append_audit
 from app.config import get_settings
 from app.models import Job, JobStatus, Payment, Payout
 from app.paypal.client import PayPalClient, PayPalError
-from app.state_machine import transition
+from app.state_machine import InvalidTransition, transition
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +85,14 @@ def _capture(db: Session, job: Job, paypal: PayPalClient) -> bool:
         payment.capture_id = capture.id
         payment.status = "CAPTURED"
         db.commit()
+    except InvalidTransition:
+        # A concurrent settle already recorded this capture (PayPal returned the same capture to both).
+        db.rollback()
+        db.refresh(job)
+        if JobStatus(job.status) not in (JobStatus.CAPTURED, JobStatus.PAID_OUT):
+            log.error("Capture %s for job %s: unexpected status %s after a failed transition",
+                      capture.id, job.id, job.status, exc_info=True)
+            raise
     except Exception:
         # The customer was charged but we failed to record it. Log the ID so it can be recovered.
         log.error("Capture %s for job %s succeeded at PayPal but the DB write failed",
@@ -103,12 +112,18 @@ def _create_payout(db: Session, job: Job, paypal: PayPalClient) -> None:
     except PayPalError as exc:
         _error(db, job, "PAYOUT_ERROR", {"http_status": exc.status_code, "debug_id": exc.debug_id})
         return
-    db.add(Payout(job_id=job.id, batch_id=batch.batch_id, item_id=batch.item_id,
-                  amount=job.amount, status=PAYOUT_PENDING))
-    append_audit(db, job_id=job.id, actor="system", event="PAYOUT_CREATED",
-                 payload={"batch_id": batch.batch_id, "receiver": email,
-                          "amount": job.amount, "currency": job.currency})
-    db.commit()
+    try:
+        db.add(Payout(job_id=job.id, batch_id=batch.batch_id, item_id=batch.item_id,
+                      amount=job.amount, status=PAYOUT_PENDING))
+        append_audit(db, job_id=job.id, actor="system", event="PAYOUT_CREATED",
+                     payload={"batch_id": batch.batch_id, "receiver": email,
+                              "amount": job.amount, "currency": job.currency})
+        db.commit()
+    except IntegrityError:
+        # A concurrent settle already recorded the payout (one per job). PayPal's batch id is
+        # deterministic, so both requests got the same batch; drop our duplicate rows.
+        db.rollback()
+        db.refresh(job)
 
 
 def _poll_payout(db: Session, job: Job, payout: Payout, paypal: PayPalClient) -> None:

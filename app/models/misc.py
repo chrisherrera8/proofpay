@@ -37,7 +37,7 @@ class Payout(Base):
     __tablename__ = "payouts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    job_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("jobs.id"), index=True)
+    job_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("jobs.id"), index=True, unique=True)
     batch_id: Mapped[str | None] = mapped_column(String(64), index=True)
     item_id: Mapped[str | None] = mapped_column(String(64))
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))

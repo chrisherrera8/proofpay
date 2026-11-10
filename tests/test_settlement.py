@@ -1,13 +1,14 @@
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.audit import verify_chain
 from app.config import get_settings
-from app.models import AuditLog, Payment, Payout
+from app.models import AuditLog, Job, Payment, Payout
 from app.paypal.client import PayPalError
 from app.settlement import mark_paid, settle
+from app.state_machine import InvalidTransition
 from tests.fakes import FakePayPal
 
 CLEANER = "cleaner@example.com"
@@ -80,6 +81,92 @@ def test_capture_error_leaves_released_and_retry_succeeds(db, released, paypal):
     db.refresh(job)
     assert job.status == "CAPTURED"
     assert len(payouts(db)) == 1
+
+
+@pytest.fixture
+def committed_job():
+    """A RELEASED job committed for real, so separate sessions/threads can see it.
+
+    The `db` fixture rolls everything back, so it can't be shared across connections.
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import text
+
+    from app.db import SessionLocal, engine
+    from tests.conftest import TABLES
+
+    with SessionLocal() as s:
+        job = Job(status="RELEASED", customer_name="C", customer_email="c@example.com",
+                  address="1 Test St", service_type="basic", currency="USD",
+                  scheduled_at=datetime(2026, 11, 10, 9, 0, tzinfo=timezone.utc),
+                  amount=Decimal("10.00"))
+        s.add(job)
+        s.flush()
+        s.add(Payment(job_id=job.id, order_id=f"O-{job.id}", authorization_id="A1",
+                      authorized_amount=job.amount, status="AUTHORIZED"))
+        s.commit()
+        job_id = job.id
+    yield job_id
+    with engine.begin() as conn:
+        conn.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+
+
+def test_two_concurrent_settles_record_the_capture_once(committed_job):
+    """Two real sessions on two threads. A barrier inside the PayPal capture call makes both
+    capture before either records it, so the real transition() row lock decides the winner."""
+    import threading
+
+    from app.db import SessionLocal
+
+    barrier = threading.Barrier(2, timeout=10)
+
+    class RacingPayPal(FakePayPal):
+        def capture_authorization(self, authorization_id, amount, currency):
+            result = super().capture_authorization(authorization_id, amount, currency)
+            barrier.wait()  # both threads now hold a capture; neither has touched the DB yet
+            return result
+
+    paypal = RacingPayPal()
+    errors = []
+
+    def run():
+        try:
+            with SessionLocal() as s:
+                settle(s, s.get(Job, committed_job), paypal)
+        except Exception as exc:  # surfaced below so a thread failure fails the test
+            errors.append(exc)
+
+    threads = [threading.Thread(target=run) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=20)
+
+    assert errors == []
+    assert len(paypal.capture_calls) == 2  # both really raced past PayPal
+    with SessionLocal() as s:
+        assert s.get(Job, committed_job).status == "CAPTURED"
+        assert events(s).count("CAPTURE_COMPLETED") == 1
+        payment = s.scalar(select(Payment).where(Payment.job_id == committed_job))
+        assert (payment.capture_id, payment.status) == ("CAP1", "CAPTURED")
+        assert len(payouts(s)) == 1
+        assert verify_chain(s) is None
+
+
+def test_stale_capture_with_unexpected_status_is_not_swallowed(db, released, paypal, monkeypatch):
+    """If the transition fails and the job is NOT captured/paid, the error must propagate."""
+    job = released()
+
+    def bad_transition(*args, **kwargs):
+        raise InvalidTransition("RELEASED", "CAPTURED")
+
+    monkeypatch.setattr("app.settlement.transition", bad_transition)
+    with pytest.raises(InvalidTransition):
+        settle(db, job, paypal)
+    db.refresh(job)
+    assert job.status == "RELEASED"
+    assert payouts(db) == []
 
 
 @pytest.mark.parametrize("status", ["PENDING", "DECLINED"])
