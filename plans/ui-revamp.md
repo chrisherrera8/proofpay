@@ -1,5 +1,11 @@
 # UI Revamp Plan (experimental)
 
+**Status (Nov 9): steps 1-5 done on `experiment/ui-revamp`; step 6 (decide) is yours.** Decisions: Inter, light only, brand color changed from teal `#0b7a75` to evergreen `#17594A` on warm off-white `#FAF8F4`, with honey `#F6D58A` as the only highlight color. Notes from the build:
+- `shadcn init` hangs on an interactive prompt in this setup, so `components.json` and `src/lib/utils.ts` were written by hand. `shadcn add` also wired `cn` to an unrelated npm package called `cn`; fixed to `@/lib/utils`. Watch for that on future `add` runs.
+- The npm cache at `~/.npm` has root-owned files (`npm error EACCES`); run `sudo chown -R 501:20 ~/.npm` once.
+- The `.mcp.json` servers need a one-time approval the next time `claude` starts in the repo.
+- Screens were checked with Playwright against a mocked API at 390px and 1280px; the PayPal buttons render but load slowly, so screenshots must wait for the iframe. Not yet checked against the real API or a real sandbox payment.
+
 Goal: make the web app (`web/`) look like a designer worked on it, by giving the agent real components, a design rules file it loads every session, and a way to see what it rendered. Branch: `experiment/ui-revamp`. Experimental: nothing here merges to `main` unless the result is clearly better than what's live.
 
 **Timing:** the hackathon deadline is Nov 12, 12:00pm PST, and feature freeze was Nov 9. This work touches only how pages look, not the API or money flow. If it isn't clearly better by Nov 11 evening, the demo runs on the current `main` and this branch waits.
