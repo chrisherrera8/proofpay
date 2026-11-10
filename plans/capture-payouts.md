@@ -66,7 +66,7 @@ One function that does the next missing step for a job and returns:
 
 Registering the webhook is manual: add the Render API URL (`/api/webhooks/paypal`) in the PayPal developer dashboard, subscribe to the payout item events, and set `PAYPAL_WEBHOOK_ID` on Render. Add `paypal_webhook_id` and `paypal_cleaner_email` to `app/config.py`.
 
-### 5. Web (small) (to do)
+### 5. Web (small) (done Nov 9; manual sandbox run still to do)
 
 On `/cleaner/:jobId`, show payment progress under the decision panel when the job is `CAPTURED` or `PAID_OUT`: "Payment captured, payout on the way" and "Paid $10.00 to your PayPal". A "Retry payment" button when the job is `RELEASED`, or `CAPTURED` with a payout that is not `FAILED`, calls `/settle`. For a `FAILED` payout `settle` does nothing (it only logs), so hide the button there and show "Payout failed, needs attention" instead. This needs the job API response to expose the payout's status (`JobOut.payout` is done in step 3; add it to the web `Job` type here). `npx tsc --noEmit` must pass.
 
@@ -88,7 +88,7 @@ On `/cleaner/:jobId`, show payment progress under the decision panel when the jo
 2. ~~`settle()`, `mark_paid()` and config, with DB tests.~~ (done Nov 9, review fixes included)
 3. ~~Hook into `/submit`, `/verify` and `/approval`, add `/settle` and `JobOut.payout`, fix the old `RELEASED` assertions.~~ (done Nov 9)
 4. ~~Webhook endpoint and tests.~~ (done Nov 9; `PAYPAL_WEBHOOK_ID` and `PAYPAL_CLEANER_EMAIL` are set on Render)
-5. **Next:** small web change, then the manual sandbox run (deploy this branch to Render first).
+5. ~~Small web change.~~ (done Nov 9) **Next:** the manual sandbox run (deploy this branch to Render first).
 
 Each step is one commit, reviewed before the next.
 
