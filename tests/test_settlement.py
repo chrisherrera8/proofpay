@@ -308,6 +308,24 @@ def test_polling_error_changes_nothing(db, released, paypal):
     assert job.status == "CAPTURED"
 
 
+def test_settling_a_job_whose_payout_failed_does_nothing(db, released, paypal, caplog):
+    """A FAILED payout needs a human (plan: failed payouts stay CAPTURED). settle must not call
+    PayPal or write audit rows, but must say why it is skipping."""
+    job = released(status="CAPTURED")
+    db.add(Payout(job_id=job.id, batch_id="B9", amount=job.amount, status="FAILED"))
+    db.commit()
+
+    with caplog.at_level("WARNING", logger="app.settlement"):
+        settle(db, job, paypal)
+
+    assert paypal.capture_calls == paypal.payout_calls == paypal.batch_calls == []
+    db.refresh(job)
+    assert job.status == "CAPTURED"
+    assert [p.status for p in payouts(db)] == ["FAILED"]
+    assert events(db) == []
+    assert "B9" in caplog.text
+
+
 def test_mark_paid_sets_success_and_paid_out(db, released):
     job = released(status="CAPTURED")
     payout = Payout(job_id=job.id, batch_id="B9", amount=job.amount, status="PENDING")

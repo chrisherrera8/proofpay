@@ -68,7 +68,7 @@ Registering the webhook is manual: add the Render API URL (`/api/webhooks/paypal
 
 ### 5. Web (small)
 
-On `/cleaner/:jobId`, show payment progress under the decision panel when the job is `CAPTURED` or `PAID_OUT`: "Payment captured, payout on the way" and "Paid $10.00 to your PayPal". A "Retry payment" button when the job is `RELEASED` or `CAPTURED` calls `/settle`. `npx tsc --noEmit` must pass.
+On `/cleaner/:jobId`, show payment progress under the decision panel when the job is `CAPTURED` or `PAID_OUT`: "Payment captured, payout on the way" and "Paid $10.00 to your PayPal". A "Retry payment" button when the job is `RELEASED`, or `CAPTURED` with a payout that is not `FAILED`, calls `/settle`. For a `FAILED` payout `settle` does nothing (it only logs), so hide the button there and show "Payout failed, needs attention" instead. This needs the job API response to expose the latest payout's status; add it in this step. `npx tsc --noEmit` must pass.
 
 ## Tests
 

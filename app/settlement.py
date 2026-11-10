@@ -39,6 +39,10 @@ def settle(db: Session, job: Job, paypal: PayPalClient) -> Job:
             _create_payout(db, job, paypal)
         elif payout.status == PAYOUT_PENDING:
             _poll_payout(db, job, payout, paypal)
+        elif payout.status == PAYOUT_FAILED:
+            # Not retried automatically: the failure may be ambiguous (e.g. UNCLAIMED money can still
+            # be claimed), and there is one payout per job. A human has to look.
+            log.warning("Job %s payout batch %s is FAILED; not retrying", job.id, payout.batch_id)
     return job
 
 
