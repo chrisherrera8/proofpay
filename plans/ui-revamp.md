@@ -15,7 +15,6 @@ Goal: make the web app (`web/`) look like a designer worked on it, by giving the
 - Vite 5 + React 18 + TypeScript, React Router. Five pages (`Home`, `Book`, `Booked`, `CleanerJobs`, `CleanerJob`), about 520 lines in total.
 - One hand-written `web/src/styles.css` (45 lines): six CSS variables (`--brand #0b7a75`, `--ink`, `--muted`, `--bg`, `--card`, `--line`), `system-ui` font, global classes (`.btn`, `.card`, `.form`, `.pick`, `.badge`, ...).
 - No Tailwind, no component library, no `@/` path alias, no `CLAUDE.md`, no project MCP servers.
-- `/admin` (approvals, audit log) isn't built yet. If it gets built, it starts on the new components.
 
 ## The three pieces (from the rubric), adapted to this repo
 

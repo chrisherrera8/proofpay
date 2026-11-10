@@ -10,7 +10,7 @@ Built for the PayPal AI Hackathon (Devpost).
 ## Layout
 
 - `app/` FastAPI service (API, state machine, policy engine, webhooks)
-- `web/` Vite app: `/` (cleaning site with 3 tiers), `/book`, `/cleaner`, `/admin`
+- `web/` Vite app: `/` (cleaning site with 3 tiers), `/book`, `/cleaner`
 - `spikes/` throwaway PayPal/MCP experiments
 
 ## Setup

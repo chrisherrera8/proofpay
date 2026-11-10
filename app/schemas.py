@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -33,6 +33,28 @@ class JobCreate(BaseModel):
         if self.amount != expected:
             raise ValueError(f"amount for {self.service_type} must be {expected}")
         return self
+
+
+class CleanerCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)  # trim before the length and pattern checks
+
+    name: str = Field(min_length=1, max_length=200)
+    paypal_email: str = Field(min_length=3, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+class CleanerOut(BaseModel):
+    """Public view: the PayPal email is never returned (the list endpoint has no auth)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    is_seed: bool
+    created_at: datetime
+
+
+class CleanerAvailability(CleanerOut):
+    available: bool
 
 
 class ChecklistItemOut(BaseModel):
@@ -105,6 +127,8 @@ class JobOut(BaseModel):
     currency: str
     authorized_at: datetime | None
     created_at: datetime
+    cleaner_id: uuid.UUID | None = None
+    service_date: date | None = None
     checklist_items: list[ChecklistItemOut]
     payment: PaymentSummary | None
     verification: VerificationOut | None = None

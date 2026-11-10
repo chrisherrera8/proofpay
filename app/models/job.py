@@ -1,9 +1,9 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, and_, func, select
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, and_, func, select
 from sqlalchemy.orm import Mapped, aliased, mapped_column, relationship
 
 from app.db import Base
@@ -41,6 +41,9 @@ class Job(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     authorized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The cleaner is booked for this whole day. cleaner_id goes NULL when the cleaner is purged (the job stays).
+    cleaner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cleaners.id", ondelete="SET NULL"), index=True)
+    service_date: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

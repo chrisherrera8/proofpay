@@ -55,6 +55,7 @@ def create_job(body: JobCreate, db: Session = Depends(get_db)) -> Job:
 @router.get("", response_model=list[JobOut])
 def list_jobs(
     status: JobStatus | None = None,
+    cleaner_id: uuid.UUID | None = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -62,6 +63,8 @@ def list_jobs(
     stmt = select(Job).options(*JOB_LOAD_OPTIONS).order_by(Job.created_at.desc(), Job.id).limit(limit).offset(offset)
     if status:
         stmt = stmt.where(Job.status == status.value)
+    if cleaner_id:
+        stmt = stmt.where(Job.cleaner_id == cleaner_id)
     return list(db.scalars(stmt))
 
 
