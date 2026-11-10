@@ -2,7 +2,7 @@
 
 Combines idea #1 (proof-of-work payment release for home-service jobs) with idea #3 (agent spend mandates: policy engine, human approvals, audit log) for the PayPal AI Hackathon on Devpost.
 
-Status: spikes 0-5 done (spike 4 vision test and spike 5 docs checks finished Nov 4), repo scaffolded (MIT). Customer site built, deployed and merged to `main` on Nov 5 (PR #2; see `plans/finished/customer-site.md`). Backend foundation merged to `main` on Nov 4 (PR #1): models, Alembic, state machine, hash-chained audit log, booking API, PayPal order and authorize endpoints, 131 tests, one sandbox run. Cleaner upload and vision verification merged Nov 9 (PR #3) and the policy engine with approvals merged Nov 9 (PR #4; see `plans/finished/policy-engine.md`). Capture, Payouts and webhooks are next (`plans/capture-payouts.md`). Schedule re-based Nov 2.
+Status: spikes 0-5 done (spike 4 vision test and spike 5 docs checks finished Nov 4), repo scaffolded (MIT). Customer site built, deployed and merged to `main` on Nov 5 (PR #2; see `plans/finished/customer-site.md`). Backend foundation merged to `main` on Nov 4 (PR #1): models, Alembic, state machine, hash-chained audit log, booking API, PayPal order and authorize endpoints, 131 tests, one sandbox run. Cleaner upload and vision verification merged Nov 9 (PR #3) and the policy engine with approvals merged Nov 9 (PR #4; see `plans/finished/policy-engine.md`). Capture, payouts and webhooks merged Nov 9 (PR #5, 338 tests; see `plans/capture-payouts.md`), with a sandbox run on the hosted site that took a $10 job to `PAID_OUT`. The admin UI and rejection agent are next. Schedule re-based Nov 2.
 Deadline: Nov 12, 2026, 12:00pm PST. Feature freeze: Nov 9.
 
 ## 1. PayPal findings
@@ -35,7 +35,7 @@ Orders v2 also needs the buyer to approve in the PayPal JS SDK button with `inte
 
   **Built Nov 9 (`app/policy.py`), simplified for the demo:** the engine uses only the minimum score, the auto-release ceiling and the required items. The monthly cap and the approved-subcontractor list are cut (the columns stay unused in `mandates`), and one global mandate row applies, with built-in defaults when the table is empty.
 - **AI agent:** the vision call returns structured JSON (per-item pass/fail, confidence, notes). On rejection, a second call drafts the re-clean request or the dispute summary. The agent's tool calls go through the PayPal MCP server where it fits.
-- **Payout:** the payout amount is set when the payout step is built (Nov 5); no share percentage exists in the config or schema. Sent via a Payouts batch to the sandbox personal account.
+- **Payout:** built Nov 9. The cleaner gets 100% of the job amount (no share setting). Capture runs automatically after `RELEASED`, then a Payouts batch goes to `PAYPAL_CLEANER_EMAIL` in the sandbox. `PAID_OUT` is set by the `PAYMENT.PAYOUTS-ITEM.SUCCEEDED` webhook, with `POST /api/jobs/{id}/settle` as the retry and polling fallback. A failed payout leaves the job `CAPTURED`.
 
 ## 3. Customer site (own hosting)
 
@@ -90,7 +90,7 @@ Spikes 0-5 and the repo scaffold (MIT license) are done (spikes 4 and 5 finished
 | Nov 2 (done) | Spikes 0-3, scaffold with MIT license. |
 | Nov 3 | ~~Spikes 4 and 5~~ (done Nov 4). ~~Models, Alembic, state machine, audit log, booking API, PayPal authorize endpoint~~ (done Nov 4, merged as PR #1; see `plans/finished/nov4-backend-foundation.md`). |
 | Nov 4-5 | ~~Customer site (home with 3 tiers, booking form with validation, PayPal button, confirmation page), CORS, server-side price check, three checklist templates~~ (done Nov 5, PR #2). ~~Deploy: Cloudflare + Render + Neon, live booking verified~~ (done Nov 5, ahead of the Nov 7 row). ~~Cleaner upload and vision verification (provider interface)~~ (done Nov 9, PR #3). |
-| Nov 5 | ~~Policy engine and mandates~~ (done Nov 9, PR #4), capture and Payouts, webhooks with signature verification, pytest on the policy engine and state machine. |
+| Nov 5 | ~~Policy engine and mandates~~ (done Nov 9, PR #4), ~~capture and Payouts, webhooks with signature verification~~ (done Nov 9, PR #5), pytest on the policy engine and state machine. |
 | Nov 6 | Admin UI (approvals, audit log), rejection agent (re-clean draft), seed data. |
 | Nov 7 | ~~Deploy~~ (done Nov 5). Re-run the full flow on the hosted URLs after the new steps land. |
 | Nov 8 | README setup instructions, bug fixes, demo rehearsal. |
@@ -103,7 +103,7 @@ Spikes 0-5 and the repo scaffold (MIT license) are done (spikes 4 and 5 finished
 
 ### Pick up here (next session)
 
-Where things stand (Nov 9): booking, PayPal authorization, cleaner photo upload, vision verification and the policy engine are built. A job now runs `BOOKED → AUTHORIZED → SUBMITTED → VERIFIED` and then the engine moves it to `RELEASED`, `PENDING_APPROVAL` or `REJECTED` in the same request; nothing exists yet for capture, payout, webhooks or the admin UI. Do these in order:
+Where things stand (Nov 9): booking, PayPal authorization, cleaner photo upload, vision verification and the policy engine are built. A job now runs `BOOKED → AUTHORIZED → SUBMITTED → VERIFIED` and then the engine moves it to `RELEASED`, `PENDING_APPROVAL` or `REJECTED` in the same request; a released job is then captured and paid out in the same request, and the webhook confirms `PAID_OUT`. Nothing exists yet for the admin UI or the rejection agent. Do these in order:
 
 1. ~~**Housekeeping:** repoint Render and Cloudflare to `main`, confirm a deploy, delete `feature/customer-site`.~~ Done Nov 6: both platforms deploy from `main`, and the local `feature/customer-site` branch is deleted (the remote branch is still to delete). Warm the API before testing (cold start 30-60s).
 2. ~~**Cleaner upload and vision verification**~~ Built Nov 6-9 on `feature/cleaner-and-vision` (merged as PR #3 on Nov 9; 227 tests pass, 97% line coverage, one live Gemini call matched its label). The `photos` and `verifications` tables already existed in the initial migration, so no new migration. Pieces:
@@ -117,7 +117,12 @@ Where things stand (Nov 9): booking, PayPal authorization, cleaner photo upload,
    - `/submit` and `/verify` call `decide()` after `VERIFIED` is committed. `JobOut.decision` (outcome and reasons) comes from the latest `POLICY_DECIDED` audit row, eager-loaded, also in the list endpoint.
    - `POST /api/jobs/{id}/approval` (`approve` or `deny`, with `decided_by` and an optional `reason`): `PENDING_APPROVAL` to `RELEASED` or `REJECTED`; 409 if not pending, 404 for an unknown job. Audit actor is `admin`, the name is in the payload.
    - Web: `/cleaner/:jobId` shows the decision and its reasons, and the per-item result on a rejected job.
-4. **Capture and Payouts, then webhooks** with signature verification (`PAYPAL_WEBHOOK_ID` is in `.env.example`; the webhook URL is the Render API). This is the next thing to build. Plan: `plans/capture-payouts.md` (branch `feature/capture-payouts`; decisions made: 100% payout to the cleaner, automatic capture after `RELEASED`, failed payouts stay `CAPTURED`). The policy engine (PR #4) is merged and was checked on the hosted site for the auto-release path only (job `999bae5c` reached `RELEASED`, audit chain intact); the reject and needs-approval paths are still untested there.
+4. ~~**Capture and Payouts, then webhooks**~~ Built Nov 9 on `feature/capture-payouts` (merged as PR #5; plan: `plans/capture-payouts.md`; 338 tests pass). Pieces:
+   - `app/paypal/client.py`: `capture_authorization`, `create_payout`, `get_payout_batch` and `verify_webhook` (fails closed). Capture and payout use deterministic `PayPal-Request-Id`s, and the payout's `sender_batch_id` is `proofpay-{job_id}`, so a retry can't pay twice.
+   - `app/settlement.py`: `settle()` does the next missing step (capture, create the payout, or poll the batch) and `mark_paid()` is shared with the webhook. It is hooked into `/submit`, `/verify` and `POST /approval` (approve), and a settle failure never turns a successful decision into an error. `POST /api/jobs/{id}/settle` is the manual retry (404 unknown, 409 wrong status, a `PAID_OUT` job returns as is). `JobOut.payout` carries the payout amount and status.
+   - `POST /api/webhooks/paypal` (`app/api/webhooks.py`): bad signature 400, no `PAYPAL_WEBHOOK_ID` 503, item succeeded marks the job `PAID_OUT`, item failed/unclaimed/returned/blocked marks the payout `FAILED` (job stays `CAPTURED`), a payout event with an unknown batch id returns 404 so PayPal redelivers.
+   - Web: `/cleaner/:jobId` shows the auto-release decision through `RELEASED`, `CAPTURED` and `PAID_OUT`, plus a payment panel ("Payment captured, payout on the way", "Paid $10.00 to your PayPal", "Payout failed, needs attention") and a Retry payment button.
+   - Hosted check done Nov 9: a Basic job went through the hosted site to `PAID_OUT`, a $10 payout showed on both PayPal sandbox accounts, and `GET /api/jobs/{id}` reported `PAID_OUT` with a `SUCCESS` payout. `PAYPAL_WEBHOOK_ID` and `PAYPAL_CLEANER_EMAIL` are set on Render. The reject and needs-approval paths are still untested on the hosted site.
 5. **Admin UI** (approvals, audit log) and the rejection agent, then seed data and README setup.
 
 Known gaps in the shipped cleaner work (decide when the matching step is built):
@@ -134,12 +139,18 @@ Known gaps in the policy engine work:
 - A rejection can list several reasons, including "required item not visible" ones, because every matching rule reports.
 - Photos from a rejected attempt are still attached on a re-clean (see above), and the cleaner job list does not show jobs waiting in `PENDING_APPROVAL`.
 
+Known gaps in the capture and payout work:
+- A `FAILED` payout needs a human: the job stays `CAPTURED`, `settle` does nothing for it, and there is no refund or re-payout. The admin UI should surface these.
+- Nothing voids the authorization when a job is denied or cancelled, and there is no reauthorization, so jobs older than the 3-day honor period may fail to capture; use a fresh booking.
+- One payee (`PAYPAL_CLEANER_EMAIL`), no partial captures, no refunds. `/settle` has no auth, like the other endpoints.
+- I did not confirm whether the webhook or the Retry button moved the hosted test job to `PAID_OUT`; check the PayPal dashboard for a 200 on `PAYMENT.PAYOUTS-ITEM.SUCCEEDED`.
+
 Test follow-ups (optional, in priority order):
 - Cover the `app/api/paypal.py` misses (lines 71-78 and 149-161, 84% covered), since that code handles money; also `app/paypal/client.py` lines 94, 151-152 and 159-160.
 - Frontend tests for `CleanerJob`, `CleanerJobs` and `resize.ts`. The web app has no test runner yet (none for the earlier pages either); Vitest with Testing Library would be the choice.
 - Make the `FakeVision` test double subclass the `VisionProvider` protocol, like `FakePayPal` does.
 
-Leftovers that are cheap to do alongside: a void method in the PayPal client (two open sandbox authorizations from testing), a payer-identity check on the authorize route, and the manual Deep/Deluxe/cancel tests. Feature freeze is today (Nov 9), so cut from the scope-cuts list above if capture and payouts run long (the policy engine is done).
+Leftovers that are cheap to do alongside: a void method in the PayPal client (two open sandbox authorizations from testing), a payer-identity check on the authorize route, and the manual Deep/Deluxe/cancel tests. Feature freeze is today (Nov 9), so cut from the scope-cuts list above if the admin UI runs long (the policy engine, capture and payouts are done).
 
 ## 7. Open questions
 
