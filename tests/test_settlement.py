@@ -224,6 +224,33 @@ def test_no_cleaner_email_is_a_payout_error(db, released, paypal, monkeypatch):
     assert events(db)[-1] == "PAYOUT_ERROR"
 
 
+def test_payout_db_write_failure_logs_batch_id_and_rolls_back(db, released, paypal, monkeypatch, caplog):
+    """PayPal accepted the payout but recording it failed: the batch id must be logged for recovery,
+    nothing half-written may remain, and the error must propagate."""
+    import app.settlement as settlement
+
+    job = released()
+    real_append_audit = settlement.append_audit
+
+    def failing_append_audit(db, **kwargs):
+        if kwargs["event"] == "PAYOUT_CREATED":
+            raise RuntimeError("db down")
+        return real_append_audit(db, **kwargs)
+
+    monkeypatch.setattr(settlement, "append_audit", failing_append_audit)
+    with caplog.at_level("ERROR", logger="app.settlement"):
+        with pytest.raises(RuntimeError, match="db down"):
+            settle(db, job, paypal)
+
+    assert any(r.name == "app.settlement" and r.levelname == "ERROR" and "BATCH1" in r.getMessage()
+               for r in caplog.records)
+    assert len(paypal.payout_calls) == 1
+    db.refresh(job)
+    assert job.status == "CAPTURED"  # the capture was committed before the payout step
+    assert payouts(db) == []
+    assert "PAYOUT_CREATED" not in events(db)
+
+
 @pytest.mark.parametrize("amount", ["10.00", "20.00", "30.00"])
 def test_payout_amount_equals_job_amount(db, released, paypal, amount):
     job = released(amount)

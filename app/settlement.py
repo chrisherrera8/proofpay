@@ -124,6 +124,12 @@ def _create_payout(db: Session, job: Job, paypal: PayPalClient) -> None:
         # deterministic, so both requests got the same batch; drop our duplicate rows.
         db.rollback()
         db.refresh(job)
+    except Exception:
+        # The cleaner may have been paid but we failed to record it. Log the ID so it can be recovered.
+        log.error("Payout batch %s for job %s created at PayPal but the DB write failed",
+                  batch.batch_id, job.id, exc_info=True)
+        db.rollback()
+        raise
 
 
 def _poll_payout(db: Session, job: Job, payout: Payout, paypal: PayPalClient) -> None:
