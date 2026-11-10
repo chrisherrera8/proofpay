@@ -1,3 +1,4 @@
+@import "tailwindcss";
 :root { --brand: #0b7a75; --ink: #1c2b2a; --muted: #5f706f; --bg: #f6faf9; --card: #fff; --line: #dbe6e4; }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: system-ui, sans-serif; color: var(--ink); background: var(--bg); }
