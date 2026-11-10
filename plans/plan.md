@@ -123,7 +123,7 @@ Where things stand (Nov 9): booking, PayPal authorization, cleaner photo upload,
    - `POST /api/webhooks/paypal` (`app/api/webhooks.py`): bad signature 400, no `PAYPAL_WEBHOOK_ID` 503, item succeeded marks the job `PAID_OUT`, item failed/unclaimed/returned/blocked marks the payout `FAILED` (job stays `CAPTURED`), a payout event with an unknown batch id returns 404 so PayPal redelivers.
    - Web: `/cleaner/:jobId` shows the auto-release decision through `RELEASED`, `CAPTURED` and `PAID_OUT`, plus a payment panel ("Payment captured, payout on the way", "Paid $10.00 to your PayPal", "Payout failed, needs attention") and a Retry payment button.
    - Hosted check done Nov 9: a Basic job went through the hosted site to `PAID_OUT`, a $10 payout showed on both PayPal sandbox accounts, and `GET /api/jobs/{id}` reported `PAID_OUT` with a `SUCCESS` payout. `PAYPAL_WEBHOOK_ID` and `PAYPAL_CLEANER_EMAIL` are set on Render. The reject and needs-approval paths are still untested on the hosted site.
-5. **Cleaner sign-up and booking** (cleaners book by date for the whole day, per-cleaner payee, 24-hour scrub of cleaner data). This is the next thing to build. Plan: `plans/cleaner-signup.md`.
+5. **Cleaner sign-up and booking** (cleaners book by date for the whole day, per-cleaner payee, 24-hour scrub of cleaner data). Backend built Nov 10 on `feature/cleaner-signup` (4 commits, 397 tests, not merged). **Web pages, README and the hosted check are next**; the booking page is broken on that branch until the web step lands. Plan and resume notes: `plans/cleaner-signup.md` ("Pick up here").
 
 Known gaps in the shipped cleaner work (decide when the matching step is built):
 - `/cleaner` and the photo GET endpoints have no auth, and `/cleaner` lists every waiting job.
