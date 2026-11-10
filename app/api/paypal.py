@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.audit import append_audit
+from app.cleaners import day_is_claimed_by_another
 from app.db import get_db
 from app.models import Job, JobStatus, Payment
 from app.paypal.client import PayPalClient, PayPalError, get_paypal_client
@@ -39,6 +40,13 @@ def _get_payment(db: Session, job_id: uuid.UUID) -> Payment | None:
     return db.scalar(select(Payment).where(Payment.job_id == job_id))
 
 
+def _require_cleaner_still_free(db: Session, job: Job) -> None:
+    """An unpaid job stops holding its cleaner after 30 minutes, so someone else may have booked the day since.
+    Check before any PayPal call so this customer is never charged for a day that is gone."""
+    if day_is_claimed_by_another(db, job):
+        raise HTTPException(409, "This cleaner was booked by someone else for that day. Please book again.")
+
+
 @router.post("/order", response_model=OrderOut)
 def create_order(
     job_id: uuid.UUID,
@@ -52,6 +60,7 @@ def create_order(
     existing = _get_payment(db, job.id)
     if existing:
         return OrderOut(order_id=existing.order_id)
+    _require_cleaner_still_free(db, job)
 
     try:
         order = paypal.create_order(job_id=job.id, amount=job.amount, currency=job.currency)
@@ -97,6 +106,7 @@ def authorize(
         return job  # repeat call: already done, don't call PayPal again
     if job.status != JobStatus.BOOKED.value:
         raise HTTPException(409, f"Job is {job.status}; only a BOOKED job can be authorized")
+    _require_cleaner_still_free(db, job)
 
     # The PayPal call runs outside any row lock; transition() locks the job only for the write.
     try:

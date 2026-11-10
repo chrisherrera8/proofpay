@@ -33,6 +33,15 @@ def booked_on(date: dt.date):
     return exists().where(holds)
 
 
+def day_is_claimed_by_another(db: Session, job: Job) -> bool:
+    """True if a different job already holds this job's cleaner for its day (jobs with no cleaner never conflict)."""
+    if job.cleaner_id is None or job.service_date is None:
+        return False
+    holds = and_(Job.cleaner_id == job.cleaner_id, Job.service_date == job.service_date, Job.id != job.id,
+                 or_(Job.status != JobStatus.BOOKED.value, Job.created_at > func.now() - UNPAID_HOLD))
+    return bool(db.scalar(select(exists().where(holds))))
+
+
 def list_cleaners(db: Session, date: dt.date) -> list[tuple[Cleaner, bool]]:
     """Active cleaners with whether each is free on `date`; the default cleaner first, then newest sign-ups."""
     taken = booked_on(date)
