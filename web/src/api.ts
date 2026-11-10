@@ -13,6 +13,12 @@ export interface Job {
   checklist_items: { id: number; label: string; required: boolean; position: number }[];
   verification: Verification | null;
   decision: Decision | null;
+  payout: Payout | null;
+}
+
+export interface Payout {
+  amount: string;
+  status: string; // PENDING, SUCCESS or FAILED
 }
 
 export interface Decision {
@@ -109,3 +115,6 @@ export const deletePhoto = (jobId: string, photoId: number) =>
 export const submitJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}/submit`, { method: "POST" });
 
 export const verifyJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}/verify`, { method: "POST" });
+
+// Does the next missing payment step (capture, payout, or checking whether the payout landed).
+export const settleJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}/settle`, { method: "POST" });

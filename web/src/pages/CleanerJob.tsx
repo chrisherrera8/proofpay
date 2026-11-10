@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { deletePhoto, getJob, Job, listPhotos, Photo, photoUrl, submitJob, uploadPhoto, verifyJob } from "../api";
+import { deletePhoto, getJob, Job, listPhotos, Photo, photoUrl, settleJob, submitJob, uploadPhoto, verifyJob } from "../api";
 import { resizeImage } from "../resize";
 
 const MAX_PER_KIND = 4;
@@ -67,23 +67,57 @@ function PhotoSlot({ jobId, kind, photos, locked, onChange, onError }: {
   );
 }
 
+// Statuses a job passes through once it is cleared for payment.
+const PAYMENT_STATUSES = ["RELEASED", "CAPTURED", "PAID_OUT"];
+
 // What each policy outcome means for the job's status. The reasons are only shown while the job is still
-// in the state the decision put it in (after an admin approves, the stored decision is stale).
+// in a state the decision put it in (after an admin approves, the stored decision is stale).
 const DECISION_VIEW = {
-  auto_release: { status: "RELEASED", title: "✅ Released" },
-  needs_approval: { status: "PENDING_APPROVAL", title: "⏳ Waiting for approval" },
-  reject: { status: "REJECTED", title: "❌ Rejected: please re-clean" },
+  auto_release: { statuses: PAYMENT_STATUSES, title: "✅ Released" },
+  needs_approval: { statuses: ["PENDING_APPROVAL"], title: "⏳ Waiting for approval" },
+  reject: { statuses: ["REJECTED"], title: "❌ Rejected: please re-clean" },
 } as const;
 
 function DecisionPanel({ job }: { job: Job }) {
   const d = job.decision;
   if (!d) return null;
   const view = DECISION_VIEW[d.outcome];
-  if (job.status !== view.status) return null;
+  if (!(view.statuses as readonly string[]).includes(job.status)) return null;
   return (
     <div className="result" role="status">
       <h3>{view.title}</h3>
       <ul>{d.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+    </div>
+  );
+}
+
+// Retry makes sense until the payout has failed: settle does nothing for a FAILED payout.
+function canRetryPayment(job: Job): boolean {
+  if (job.status === "RELEASED") return true;
+  return job.status === "CAPTURED" && job.payout?.status !== "FAILED";
+}
+
+function PaymentPanel({ job, working, onRetry }: { job: Job; working: boolean; onRetry: () => void }) {
+  if (!PAYMENT_STATUSES.includes(job.status)) return null;
+  const failed = job.status === "CAPTURED" && job.payout?.status === "FAILED";
+  let message: string;
+  if (job.status === "PAID_OUT") {
+    message = `💸 Paid $${job.payout?.amount ?? job.amount} to your PayPal`;
+  } else if (failed) {
+    message = "⚠️ Payout failed, needs attention";
+  } else if (job.status === "CAPTURED") {
+    message = "💳 Payment captured, payout on the way";
+  } else {
+    message = "⏳ Payment not captured yet";
+  }
+  return (
+    <div className="result" role="status">
+      <h3>{message}</h3>
+      {canRetryPayment(job) && (
+        <button className="btn small" disabled={working} onClick={onRetry}>
+          {working ? "Retrying…" : "Retry payment"}
+        </button>
+      )}
     </div>
   );
 }
@@ -160,6 +194,7 @@ export default function CleanerJob() {
       )}
 
       <DecisionPanel job={job} />
+      <PaymentPanel job={job} working={working} onRetry={() => run(settleJob)} />
 
       {v && (
         <div className="result">

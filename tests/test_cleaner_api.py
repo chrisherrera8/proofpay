@@ -9,10 +9,12 @@ from app.audit import verify_chain
 from app.config import get_settings
 from app.db import get_db
 from app.main import app
-from app.models import Approval, AuditLog, ChecklistItem, Photo, Verification
+from app.models import Approval, AuditLog, ChecklistItem, Payment, Payout, Photo, Verification
+from app.paypal.client import PayPalError, get_paypal_client
 from app.vision import VisionError, get_vision_provider
 from app.vision.base import ItemResult, VisionResult
 from app.vision.gemini import GeminiProvider
+from tests.fakes import FakePayPal
 
 JPEG = b"\xff\xd8\xff\xe0" + b"0" * 64
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
@@ -42,9 +44,20 @@ def vision():
 
 
 @pytest.fixture
-def client(db, vision):
+def paypal():
+    return FakePayPal()
+
+
+@pytest.fixture(autouse=True)
+def cleaner_email(monkeypatch):
+    monkeypatch.setattr(get_settings(), "paypal_cleaner_email", "cleaner@example.com")
+
+
+@pytest.fixture
+def client(db, vision, paypal):
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[get_vision_provider] = lambda: vision
+    app.dependency_overrides[get_paypal_client] = lambda: paypal
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -63,6 +76,7 @@ def _ready(client, make_job, db):
     # make_job creates no checklist; real jobs get a copy of the tier template at booking.
     job.checklist_items = [ChecklistItem(label=l, required=True, position=i)
                            for i, l in enumerate(["Kitchen", "Bathroom", "Floors", "Surfaces"])]
+    db.add(Payment(job_id=job.id, order_id=f"ORDER-{job.id}", authorization_id="A1", status="AUTHORIZED"))
     db.commit()
     assert _post(client, job, "before").status_code == 201
     assert _post(client, job, "after").status_code == 201
@@ -185,7 +199,9 @@ def test_submit_runs_vision_and_verifies(client, db, make_job, vision):
     r = client.post(f"/api/jobs/{job.id}/submit")
     assert r.status_code == 200
     data = r.json()
-    assert data["status"] == "RELEASED"  # all items pass at $10, so the policy engine auto-releases
+    # all items pass at $10, so the policy engine auto-releases and settlement captures straight away
+    assert data["status"] == "CAPTURED"
+    assert data["payout"] == {"amount": "10.00", "status": "PENDING"}
     assert data["decision"]["outcome"] == "auto_release"
     assert data["verification"]["model"] == "fake-vision"
     assert data["verification"]["score"] == "1.00"
@@ -194,7 +210,7 @@ def test_submit_runs_vision_and_verifies(client, db, make_job, vision):
     assert vision.calls == [(1, 1, ["Kitchen", "Bathroom", "Floors", "Surfaces"])]
     events = db.scalars(select(AuditLog.event).order_by(AuditLog.id)).all()
     assert events == ["PHOTO_UPLOADED", "PHOTO_UPLOADED", "JOB_SUBMITTED", "VERIFICATION_COMPLETED",
-                      "POLICY_DECIDED"]
+                      "POLICY_DECIDED", "CAPTURE_COMPLETED", "PAYOUT_CREATED"]
     assert verify_chain(db) is None
 
 
@@ -210,7 +226,7 @@ def test_reclean_after_rejection_resubmits_and_latest_verification_wins(client, 
     vision.fail_items = set()
     second = client.post(f"/api/jobs/{job.id}/submit")
     assert second.status_code == 200
-    assert second.json()["status"] == "RELEASED"
+    assert second.json()["status"] == "CAPTURED"
     assert second.json()["decision"]["outcome"] == "auto_release"
     assert second.json()["verification"]["results"]["overall_pass"] is True
     assert second.json()["verification"]["id"] != first["verification"]["id"]
@@ -219,6 +235,7 @@ def test_reclean_after_rejection_resubmits_and_latest_verification_wins(client, 
     assert events(db) == [
         "PHOTO_UPLOADED", "PHOTO_UPLOADED", "JOB_SUBMITTED", "VERIFICATION_COMPLETED", "POLICY_DECIDED",
         "PHOTO_UPLOADED", "JOB_SUBMITTED", "VERIFICATION_COMPLETED", "POLICY_DECIDED",
+        "CAPTURE_COMPLETED", "PAYOUT_CREATED",
     ]
     assert verify_chain(db) is None
 
@@ -241,7 +258,7 @@ def test_list_jobs_includes_latest_verification(client, db, make_job, vision):
     assert rows[str(verified.id)]["verification"]["results"]["overall_pass"] is True
     assert rows[str(waiting.id)]["verification"] is None
 
-    by_status = client.get("/api/jobs", params={"status": "RELEASED"}).json()
+    by_status = client.get("/api/jobs", params={"status": "CAPTURED"}).json()
     assert [r["id"] for r in by_status] == [str(verified.id)]
     assert by_status[0]["verification"]["id"] == second["id"]
 
@@ -281,7 +298,7 @@ def test_vision_failure_leaves_job_submitted_and_verify_retries(client, db, make
 
     vision.error = None
     r = client.post(f"/api/jobs/{job.id}/verify")
-    assert r.status_code == 200 and r.json()["status"] == "RELEASED"
+    assert r.status_code == 200 and r.json()["status"] == "CAPTURED"
     assert r.json()["decision"]["outcome"] == "auto_release"
     assert client.post(f"/api/jobs/{job.id}/verify").status_code == 409
 
@@ -346,7 +363,7 @@ def test_submit_needs_approval_above_ceiling(client, db, make_job):
 def test_submit_auto_releases_within_rules(client, db, make_job):
     job = _ready(client, make_job, db)
     data = client.post(f"/api/jobs/{job.id}/submit").json()
-    assert data["status"] == "RELEASED"
+    assert data["status"] == "CAPTURED"
     assert data["decision"]["outcome"] == "auto_release"
     assert db.scalars(select(Approval)).all() == []
     assert verify_chain(db) is None
@@ -436,11 +453,11 @@ def test_approve_releases_job(client, db, make_job):
     job = _pending(client, make_job, db)
     r = _approval(client, job, reason="Looks fine")
     assert r.status_code == 200
-    assert r.json()["status"] == "RELEASED"
+    assert r.json()["status"] == "CAPTURED"
     a = db.scalar(select(Approval))
     assert (a.status, a.decided_by, a.reason) == ("APPROVED", "owner", "Looks fine")
     assert a.decided_at is not None
-    row = db.scalars(select(AuditLog).order_by(AuditLog.id.desc())).first()
+    row = db.scalar(select(AuditLog).where(AuditLog.event == "APPROVAL_APPROVED"))
     assert (row.event, row.actor, row.from_status, row.to_status) == (
         "APPROVAL_APPROVED", "admin", "PENDING_APPROVAL", "RELEASED")
     assert row.payload == {"decided_by": "owner", "reason": "Looks fine"}
@@ -480,7 +497,7 @@ def test_second_decision_is_409_and_changes_nothing(client, db, make_job):
     assert _approval(client, job, "deny").status_code == 409
     assert _approval(client, job, "approve").status_code == 409
     db.refresh(job)
-    assert job.status == "RELEASED"
+    assert job.status == "CAPTURED"
     assert db.scalar(select(Approval)).status == "APPROVED"
     assert events(db).count("APPROVAL_APPROVED") == 1
     assert "APPROVAL_DENIED" not in events(db)
@@ -504,3 +521,105 @@ def test_pending_job_without_approval_row_is_409_and_unchanged(client, db, make_
     db.refresh(job)
     assert job.status == "PENDING_APPROVAL"
     assert events(db) == []
+
+
+# --- settlement hooks ---
+
+def test_auto_released_job_is_captured_and_payout_requested(client, db, make_job, paypal):
+    job = _ready(client, make_job, db)
+    data = client.post(f"/api/jobs/{job.id}/submit").json()
+    assert data["status"] == "CAPTURED"
+    assert paypal.capture_calls == [("A1", Decimal("10.00"), "USD")]
+    assert [c[1:] for c in paypal.payout_calls] == [("cleaner@example.com", Decimal("10.00"), "USD")]
+    assert db.scalar(select(Payout)).status == "PENDING"
+    assert verify_chain(db) is None
+
+
+def test_approved_job_is_captured(client, db, make_job, paypal):
+    job = _pending(client, make_job, db)
+    assert paypal.capture_calls == []  # parked, nothing moves before approval
+    data = _approval(client, job).json()
+    assert data["status"] == "CAPTURED"
+    assert data["payout"] == {"amount": "30.00", "status": "PENDING"}
+    assert paypal.capture_calls == [("A1", Decimal("30.00"), "USD")]
+    assert verify_chain(db) is None
+
+
+def test_denied_job_moves_no_money(client, db, make_job, paypal):
+    job = _pending(client, make_job, db)
+    _approval(client, job, "deny")
+    assert paypal.capture_calls == [] and paypal.payout_calls == []
+
+
+def test_capture_failure_still_returns_the_released_job_and_settle_retries(client, db, make_job, paypal):
+    paypal.capture_error = PayPalError("boom", status_code=503, debug_id="d1")
+    job = _ready(client, make_job, db)
+    r = client.post(f"/api/jobs/{job.id}/submit")
+    assert r.status_code == 200
+    assert r.json()["status"] == "RELEASED"
+    assert r.json()["payout"] is None
+    assert events(db)[-1] == "CAPTURE_ERROR"
+
+    paypal.capture_error = None
+    r = client.post(f"/api/jobs/{job.id}/settle")
+    assert r.status_code == 200 and r.json()["status"] == "CAPTURED"
+    assert r.json()["payout"]["status"] == "PENDING"
+    assert verify_chain(db) is None
+
+
+def test_db_failure_during_settle_does_not_break_the_decision(client, db, make_job, monkeypatch):
+    import app.api.cleaner as cleaner
+
+    def boom(db, job, paypal):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr("app.settlement.settle", boom)
+    job = _ready(client, make_job, db)
+    r = client.post(f"/api/jobs/{job.id}/submit")
+    assert r.status_code == 200
+    assert r.json()["status"] == "RELEASED"
+    assert r.json()["decision"]["outcome"] == "auto_release"
+
+
+def test_manual_settle_does_not_swallow_errors(client, db, make_job, monkeypatch):
+    job = _ready(client, make_job, db)
+    job.status = "RELEASED"
+    db.commit()
+
+    def boom(db, job, paypal):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr("app.api.cleaner.settle", boom)
+    with pytest.raises(RuntimeError):
+        client.post(f"/api/jobs/{job.id}/settle")
+
+
+def test_settle_twice_pays_once(client, db, make_job, paypal):
+    job = _ready(client, make_job, db)
+    client.post(f"/api/jobs/{job.id}/submit")
+    r = client.post(f"/api/jobs/{job.id}/settle")  # polls; the fake says the item succeeded
+    assert r.json()["status"] == "PAID_OUT"
+    assert r.json()["payout"]["status"] == "SUCCESS"
+    again = client.post(f"/api/jobs/{job.id}/settle")  # PAID_OUT: returned as is, no PayPal calls
+    assert again.status_code == 200 and again.json()["status"] == "PAID_OUT"
+    assert again.json()["payout"]["status"] == "SUCCESS"
+    assert paypal.batch_calls == ["BATCH1"]
+    assert len(paypal.capture_calls) == 1 and len(paypal.payout_calls) == 1
+
+
+def test_settle_404_and_409(client, db, make_job):
+    assert client.post(f"/api/jobs/{uuid.uuid4()}/settle").status_code == 404
+    job = _ready(client, make_job, db)  # AUTHORIZED
+    r = client.post(f"/api/jobs/{job.id}/settle")
+    assert r.status_code == 409 and "AUTHORIZED" in r.json()["detail"]
+
+
+def test_payout_is_in_detail_and_list(client, db, make_job):
+    captured = _ready(client, make_job, db)
+    client.post(f"/api/jobs/{captured.id}/submit")
+    waiting = make_job("AUTHORIZED")
+    detail = client.get(f"/api/jobs/{captured.id}").json()
+    assert detail["payout"] == {"amount": "10.00", "status": "PENDING"}
+    rows = {r["id"]: r for r in client.get("/api/jobs").json()}
+    assert rows[str(captured.id)]["payout"] == {"amount": "10.00", "status": "PENDING"}
+    assert rows[str(waiting.id)]["payout"] is None

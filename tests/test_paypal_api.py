@@ -8,30 +8,8 @@ from app.audit import verify_chain
 from app.db import get_db
 from app.main import app
 from app.models import AuditLog, Payment
-from app.paypal.client import Authorization, Order, PayPalClient, PayPalError, get_paypal_client
-
-
-class FakePayPal(PayPalClient):
-    def __init__(self):
-        self.order_calls = []
-        self.authorize_calls = []
-        self.order_error = None
-        self.authorize_error = None
-        self.auth = Authorization(
-            "A1", "CREATED", Decimal("10.00"), "USD", "COMPLETED", "dbg", "buyer@example.com", "PAYER1"
-        )
-
-    def create_order(self, *, job_id, amount, currency, description=None):
-        self.order_calls.append(job_id)
-        if self.order_error:
-            raise self.order_error
-        return Order(id="ORDER1", status="CREATED")
-
-    def authorize_order(self, order_id):
-        self.authorize_calls.append(order_id)
-        if self.authorize_error:
-            raise self.authorize_error
-        return self.auth
+from app.paypal.client import Authorization, PayPalError, get_paypal_client
+from tests.fakes import FakePayPal
 
 
 @pytest.fixture

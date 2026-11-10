@@ -2,7 +2,7 @@
 
 Combines idea #1 (proof-of-work payment release for home-service jobs) with idea #3 (agent spend mandates: policy engine, human approvals, audit log) for the PayPal AI Hackathon on Devpost.
 
-Status: spikes 0-5 done (spike 4 vision test and spike 5 docs checks finished Nov 4), repo scaffolded (MIT). Customer site built, deployed and merged to `main` on Nov 5 (PR #2; see `plans/finished/customer-site.md`). Backend foundation merged to `main` on Nov 4 (PR #1): models, Alembic, state machine, hash-chained audit log, booking API, PayPal order and authorize endpoints, 131 tests, one sandbox run. Schedule re-based Nov 2.
+Status: spikes 0-5 done (spike 4 vision test and spike 5 docs checks finished Nov 4), repo scaffolded (MIT). Customer site built, deployed and merged to `main` on Nov 5 (PR #2; see `plans/finished/customer-site.md`). Backend foundation merged to `main` on Nov 4 (PR #1): models, Alembic, state machine, hash-chained audit log, booking API, PayPal order and authorize endpoints, 131 tests, one sandbox run. Cleaner upload and vision verification merged Nov 9 (PR #3) and the policy engine with approvals merged Nov 9 (PR #4; see `plans/finished/policy-engine.md`). Capture, Payouts and webhooks are next (`plans/capture-payouts.md`). Schedule re-based Nov 2.
 Deadline: Nov 12, 2026, 12:00pm PST. Feature freeze: Nov 9.
 
 ## 1. PayPal findings
@@ -32,6 +32,8 @@ Orders v2 also needs the buyer to approve in the PayPal JS SDK button with `inte
   - an auto-release ceiling
   - a minimum score
   - required checklist items that must pass
+
+  **Built Nov 9 (`app/policy.py`), simplified for the demo:** the engine uses only the minimum score, the auto-release ceiling and the required items. The monthly cap and the approved-subcontractor list are cut (the columns stay unused in `mandates`), and one global mandate row applies, with built-in defaults when the table is empty.
 - **AI agent:** the vision call returns structured JSON (per-item pass/fail, confidence, notes). On rejection, a second call drafts the re-clean request or the dispute summary. The agent's tool calls go through the PayPal MCP server where it fits.
 - **Payout:** the payout amount is set when the payout step is built (Nov 5); no share percentage exists in the config or schema. Sent via a Payouts batch to the sandbox personal account.
 
@@ -87,8 +89,8 @@ Spikes 0-5 and the repo scaffold (MIT license) are done (spikes 4 and 5 finished
 |---|---|
 | Nov 2 (done) | Spikes 0-3, scaffold with MIT license. |
 | Nov 3 | ~~Spikes 4 and 5~~ (done Nov 4). ~~Models, Alembic, state machine, audit log, booking API, PayPal authorize endpoint~~ (done Nov 4, merged as PR #1; see `plans/finished/nov4-backend-foundation.md`). |
-| Nov 4-5 | ~~Customer site (home with 3 tiers, booking form with validation, PayPal button, confirmation page), CORS, server-side price check, three checklist templates~~ (done Nov 5, PR #2). ~~Deploy: Cloudflare + Render + Neon, live booking verified~~ (done Nov 5, ahead of the Nov 7 row). **Not started:** cleaner upload and vision verification (provider interface). |
-| Nov 5 | Policy engine and mandates, capture and Payouts, webhooks with signature verification, pytest on the policy engine and state machine. |
+| Nov 4-5 | ~~Customer site (home with 3 tiers, booking form with validation, PayPal button, confirmation page), CORS, server-side price check, three checklist templates~~ (done Nov 5, PR #2). ~~Deploy: Cloudflare + Render + Neon, live booking verified~~ (done Nov 5, ahead of the Nov 7 row). ~~Cleaner upload and vision verification (provider interface)~~ (done Nov 9, PR #3). |
+| Nov 5 | ~~Policy engine and mandates~~ (done Nov 9, PR #4), capture and Payouts, webhooks with signature verification, pytest on the policy engine and state machine. |
 | Nov 6 | Admin UI (approvals, audit log), rejection agent (re-clean draft), seed data. |
 | Nov 7 | ~~Deploy~~ (done Nov 5). Re-run the full flow on the hosted URLs after the new steps land. |
 | Nov 8 | README setup instructions, bug fixes, demo rehearsal. |
@@ -109,13 +111,13 @@ Where things stand (Nov 9): booking, PayPal authorization, cleaner photo upload,
    - `app/api/cleaner.py`: `POST/GET/DELETE /api/jobs/{id}/photos` (raw image body, `?kind=before|after`, magic-byte check for JPEG/PNG/WebP, 3 MB and 4-per-kind caps), `POST /submit` (`AUTHORIZED|REJECTED → SUBMITTED → VERIFIED`) and `POST /verify` to retry when the vision call fails (the job stays `SUBMITTED`). `JobOut` includes the latest `verification`, also in the list endpoint.
    - Web: `/cleaner` (job list) and `/cleaner/:jobId` (client-side resize to 1024px, thumbnails, submit, per-item result).
    - Tests now run against a local Postgres (`docker compose up -d --wait`, then `uv run pytest`; override with `TEST_DATABASE_URL`). Coverage: `uv run pytest --cov=app --cov-report=term-missing`.
-   - **Before merging:** add `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) on Render, then run a hosted end-to-end check.
+   - Hosted check done Nov 9: `GEMINI_API_KEY` is set on Render and a Basic job went from photos to `RELEASED` on the deployed site (`gemini-3.6-flash`, score 1.0).
 3. ~~**Policy engine and mandates**~~ Built Nov 9 on `feature/policy-engine` (plan: `plans/finished/policy-engine.md`; 273 tests pass). Pieces:
    - `app/policy.py`: pure `evaluate()` (seven ordered rules; the first match sets the outcome and every matching rule adds a reason), `DEFAULT_RULES` (min score 0.80, auto-release ceiling $25.00, no required items), `get_mandate(db)` (newest `mandates` row, a NULL column falls back to its default) and `decide(db, job)`, which moves `VERIFIED` to `RELEASED`, `PENDING_APPROVAL` or `REJECTED` with a `POLICY_DECIDED` audit row (outcome, reasons, rules in force, verification id) and a PENDING `Approval` for `needs_approval`. No migration.
    - `/submit` and `/verify` call `decide()` after `VERIFIED` is committed. `JobOut.decision` (outcome and reasons) comes from the latest `POLICY_DECIDED` audit row, eager-loaded, also in the list endpoint.
    - `POST /api/jobs/{id}/approval` (`approve` or `deny`, with `decided_by` and an optional `reason`): `PENDING_APPROVAL` to `RELEASED` or `REJECTED`; 409 if not pending, 404 for an unknown job. Audit actor is `admin`, the name is in the payload.
    - Web: `/cleaner/:jobId` shows the decision and its reasons, and the per-item result on a rejected job.
-4. **Capture and Payouts, then webhooks** with signature verification (`PAYPAL_WEBHOOK_ID` is in `.env.example`; the webhook URL is the Render API).
+4. **Capture and Payouts, then webhooks** with signature verification (`PAYPAL_WEBHOOK_ID` is in `.env.example`; the webhook URL is the Render API). This is the next thing to build. Plan: `plans/capture-payouts.md` (branch `feature/capture-payouts`; decisions made: 100% payout to the cleaner, automatic capture after `RELEASED`, failed payouts stay `CAPTURED`). The policy engine (PR #4) is merged and was checked on the hosted site for the auto-release path only (job `999bae5c` reached `RELEASED`, audit chain intact); the reject and needs-approval paths are still untested there.
 5. **Admin UI** (approvals, audit log) and the rejection agent, then seed data and README setup.
 
 Known gaps in the shipped cleaner work (decide when the matching step is built):
@@ -137,7 +139,7 @@ Test follow-ups (optional, in priority order):
 - Frontend tests for `CleanerJob`, `CleanerJobs` and `resize.ts`. The web app has no test runner yet (none for the earlier pages either); Vitest with Testing Library would be the choice.
 - Make the `FakeVision` test double subclass the `VisionProvider` protocol, like `FakePayPal` does.
 
-Leftovers that are cheap to do alongside: a void method in the PayPal client (two open sandbox authorizations from testing), a payer-identity check on the authorize route, and the manual Deep/Deluxe/cancel tests. Feature freeze is today (Nov 9), so cut from the scope-cuts list above if the policy engine or payouts run long.
+Leftovers that are cheap to do alongside: a void method in the PayPal client (two open sandbox authorizations from testing), a payer-identity check on the authorize route, and the manual Deep/Deluxe/cancel tests. Feature freeze is today (Nov 9), so cut from the scope-cuts list above if capture and payouts run long (the policy engine is done).
 
 ## 7. Open questions
 

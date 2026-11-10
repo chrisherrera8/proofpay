@@ -9,15 +9,22 @@ from sqlalchemy.orm import Session
 from app.api.jobs import JOB_LOAD_OPTIONS
 from app.db import get_db
 from app.models import Approval, Job, JobStatus
+from app.paypal.client import PayPalClient, get_paypal_client
 from app.schemas import ApprovalDecisionIn, JobOut
+from app.settlement import settle_after_release
 from app.state_machine import InvalidTransition, transition
 
 router = APIRouter(prefix="/api/jobs/{job_id}", tags=["approvals"])
 
 
 @router.post("/approval", response_model=JobOut)
-def decide_approval(job_id: uuid.UUID, body: ApprovalDecisionIn, db: Session = Depends(get_db)) -> Job:
-    """approve: PENDING_APPROVAL -> RELEASED. deny: PENDING_APPROVAL -> REJECTED (the cleaner can re-clean).
+def decide_approval(
+    job_id: uuid.UUID,
+    body: ApprovalDecisionIn,
+    db: Session = Depends(get_db),
+    paypal: PayPalClient = Depends(get_paypal_client),
+) -> Job:
+    """approve: PENDING_APPROVAL -> RELEASED, then capture and payout (best effort; /settle retries). deny: PENDING_APPROVAL -> REJECTED (the cleaner can re-clean).
 
     No auth in the demo; decided_by is free text, so the audit actor is the fixed "admin" and the name goes in the payload.
     """
@@ -50,4 +57,6 @@ def decide_approval(job_id: uuid.UUID, body: ApprovalDecisionIn, db: Session = D
         approval.reason = body.reason
     db.commit()
     db.refresh(job)
+    if approve:
+        settle_after_release(db, job, paypal)
     return job

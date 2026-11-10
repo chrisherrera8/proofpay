@@ -84,6 +84,13 @@ class PhotoOut(BaseModel):
     created_at: datetime
 
 
+class PayoutOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    amount: Decimal
+    status: str
+
+
 class JobOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -102,3 +109,4 @@ class JobOut(BaseModel):
     payment: PaymentSummary | None
     verification: VerificationOut | None = None
     decision: DecisionOut | None = None
+    payout: PayoutOut | None = None
