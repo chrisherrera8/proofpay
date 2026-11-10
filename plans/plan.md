@@ -2,7 +2,7 @@
 
 Combines idea #1 (proof-of-work payment release for home-service jobs) with idea #3 (agent spend mandates: policy engine, human approvals, audit log) for the PayPal AI Hackathon on Devpost.
 
-Status: spikes 0-5 done (spike 4 vision test and spike 5 docs checks finished Nov 4), repo scaffolded (MIT). Customer site built, deployed and merged to `main` on Nov 5 (PR #2; see `plans/finished/customer-site.md`). Backend foundation merged to `main` on Nov 4 (PR #1): models, Alembic, state machine, hash-chained audit log, booking API, PayPal order and authorize endpoints, 131 tests, one sandbox run. Schedule re-based Nov 2.
+Status: spikes 0-5 done (spike 4 vision test and spike 5 docs checks finished Nov 4), repo scaffolded (MIT). Customer site built, deployed and merged to `main` on Nov 5 (PR #2; see `plans/finished/customer-site.md`). Backend foundation merged to `main` on Nov 4 (PR #1): models, Alembic, state machine, hash-chained audit log, booking API, PayPal order and authorize endpoints, 131 tests, one sandbox run. Cleaner upload and vision verification merged Nov 9 (PR #3) and the policy engine with approvals merged Nov 9 (PR #4; see `plans/finished/policy-engine.md`). Capture, Payouts and webhooks are next (`plans/capture-payouts.md`). Schedule re-based Nov 2.
 Deadline: Nov 12, 2026, 12:00pm PST. Feature freeze: Nov 9.
 
 ## 1. PayPal findings
@@ -32,6 +32,8 @@ Orders v2 also needs the buyer to approve in the PayPal JS SDK button with `inte
   - an auto-release ceiling
   - a minimum score
   - required checklist items that must pass
+
+  **Built Nov 9 (`app/policy.py`), simplified for the demo:** the engine uses only the minimum score, the auto-release ceiling and the required items. The monthly cap and the approved-subcontractor list are cut (the columns stay unused in `mandates`), and one global mandate row applies, with built-in defaults when the table is empty.
 - **AI agent:** the vision call returns structured JSON (per-item pass/fail, confidence, notes). On rejection, a second call drafts the re-clean request or the dispute summary. The agent's tool calls go through the PayPal MCP server where it fits.
 - **Payout:** the payout amount is set when the payout step is built (Nov 5); no share percentage exists in the config or schema. Sent via a Payouts batch to the sandbox personal account.
 
@@ -88,7 +90,7 @@ Spikes 0-5 and the repo scaffold (MIT license) are done (spikes 4 and 5 finished
 | Nov 2 (done) | Spikes 0-3, scaffold with MIT license. |
 | Nov 3 | ~~Spikes 4 and 5~~ (done Nov 4). ~~Models, Alembic, state machine, audit log, booking API, PayPal authorize endpoint~~ (done Nov 4, merged as PR #1; see `plans/finished/nov4-backend-foundation.md`). |
 | Nov 4-5 | ~~Customer site (home with 3 tiers, booking form with validation, PayPal button, confirmation page), CORS, server-side price check, three checklist templates~~ (done Nov 5, PR #2). ~~Deploy: Cloudflare + Render + Neon, live booking verified~~ (done Nov 5, ahead of the Nov 7 row). **Not started:** cleaner upload and vision verification (provider interface). |
-| Nov 5 | Policy engine and mandates, capture and Payouts, webhooks with signature verification, pytest on the policy engine and state machine. |
+| Nov 5 | ~~Policy engine and mandates~~ (done Nov 9, PR #4), capture and Payouts, webhooks with signature verification, pytest on the policy engine and state machine. |
 | Nov 6 | Admin UI (approvals, audit log), rejection agent (re-clean draft), seed data. |
 | Nov 7 | ~~Deploy~~ (done Nov 5). Re-run the full flow on the hosted URLs after the new steps land. |
 | Nov 8 | README setup instructions, bug fixes, demo rehearsal. |
@@ -137,7 +139,7 @@ Test follow-ups (optional, in priority order):
 - Frontend tests for `CleanerJob`, `CleanerJobs` and `resize.ts`. The web app has no test runner yet (none for the earlier pages either); Vitest with Testing Library would be the choice.
 - Make the `FakeVision` test double subclass the `VisionProvider` protocol, like `FakePayPal` does.
 
-Leftovers that are cheap to do alongside: a void method in the PayPal client (two open sandbox authorizations from testing), a payer-identity check on the authorize route, and the manual Deep/Deluxe/cancel tests. Feature freeze is today (Nov 9), so cut from the scope-cuts list above if the policy engine or payouts run long.
+Leftovers that are cheap to do alongside: a void method in the PayPal client (two open sandbox authorizations from testing), a payer-identity check on the authorize route, and the manual Deep/Deluxe/cancel tests. Feature freeze is today (Nov 9), so cut from the scope-cuts list above if capture and payouts run long (the policy engine is done).
 
 ## 7. Open questions
 
