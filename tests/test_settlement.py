@@ -169,6 +169,44 @@ def test_stale_capture_with_unexpected_status_is_not_swallowed(db, released, pay
     assert payouts(db) == []
 
 
+def test_db_failure_after_capture_logs_rolls_back_and_retry_recaptures(
+        db, released, paypal, monkeypatch, caplog):
+    """The customer was charged but recording it failed. Everything the transition wrote must be rolled
+    back, the capture id logged for recovery, and the error raised. A retry captures again."""
+    import app.settlement as settlement
+
+    job = released()
+    real_transition = settlement.transition
+    calls = []
+
+    def transition_then_fail(*args, **kwargs):
+        calls.append(1)
+        result = real_transition(*args, **kwargs)  # status + audit row are flushed...
+        if len(calls) == 1:
+            raise RuntimeError("db down")          # ...then the write fails, so rollback matters
+        return result
+
+    monkeypatch.setattr(settlement, "transition", transition_then_fail)
+    with caplog.at_level("ERROR", logger="app.settlement"):
+        with pytest.raises(RuntimeError, match="db down"):
+            settle(db, job, paypal)
+
+    assert "CAP1" in caplog.text
+    db.refresh(job)
+    assert job.status == "RELEASED"
+    assert events(db) == []
+    payment = db.scalar(select(Payment).where(Payment.job_id == job.id))
+    assert (payment.capture_id, payment.status) == (None, "AUTHORIZED")
+    assert payouts(db) == []
+
+    settle(db, job, paypal)  # retry
+    db.refresh(job)
+    assert job.status == "CAPTURED"
+    assert len(paypal.capture_calls) == 2
+    assert events(db) == ["CAPTURE_COMPLETED", "PAYOUT_CREATED"]
+    assert verify_chain(db) is None
+
+
 @pytest.mark.parametrize("status", ["PENDING", "DECLINED"])
 def test_capture_not_completed_does_not_advance(db, released, paypal, status):
     job = released()
@@ -256,6 +294,15 @@ def test_no_cleaner_email_is_a_payout_error(db, released, paypal, monkeypatch):
     assert job.status == "CAPTURED"
     assert paypal.payout_calls == []
     assert events(db)[-1] == "PAYOUT_ERROR"
+
+
+def test_payout_created_audit_row_records_receiver_and_amount(db, released, paypal):
+    job = released("20.00")
+    settle(db, job, paypal)
+    row = db.scalars(select(AuditLog).where(AuditLog.event == "PAYOUT_CREATED")).one()
+    assert (row.actor, row.job_id) == ("system", job.id)
+    assert row.payload == {"batch_id": "BATCH1", "receiver": CLEANER,
+                           "amount": "20.00", "currency": "USD"}
 
 
 def test_payout_db_write_failure_logs_batch_id_and_rolls_back(db, released, paypal, monkeypatch, caplog):
@@ -378,6 +425,22 @@ def test_mark_paid_sets_success_and_paid_out(db, released):
     assert (job.status, payout.status) == ("PAID_OUT", "SUCCESS")
     row = db.scalars(select(AuditLog).order_by(AuditLog.id.desc())).first()
     assert (row.actor, row.event, row.to_status) == ("paypal", "PAYOUT_SUCCEEDED", "PAID_OUT")
+
+
+def test_mark_paid_on_an_already_paid_job_raises_and_changes_nothing(db, released):
+    """A replayed webhook: the job is already PAID_OUT. mark_paid must refuse, not write a second row."""
+    job = released(status="PAID_OUT")
+    payout = Payout(job_id=job.id, batch_id="B9", amount=job.amount, status="SUCCESS")
+    db.add(payout)
+    db.commit()
+
+    with pytest.raises(InvalidTransition):
+        mark_paid(db, payout)
+    db.rollback()
+
+    db.refresh(job)
+    assert (job.status, payout.status) == ("PAID_OUT", "SUCCESS")
+    assert events(db) == []
 
 
 # --- other statuses ---
