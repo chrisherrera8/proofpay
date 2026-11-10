@@ -115,7 +115,7 @@ Where things stand (Nov 9): booking, PayPal authorization, cleaner photo upload,
    - `/submit` and `/verify` call `decide()` after `VERIFIED` is committed. `JobOut.decision` (outcome and reasons) comes from the latest `POLICY_DECIDED` audit row, eager-loaded, also in the list endpoint.
    - `POST /api/jobs/{id}/approval` (`approve` or `deny`, with `decided_by` and an optional `reason`): `PENDING_APPROVAL` to `RELEASED` or `REJECTED`; 409 if not pending, 404 for an unknown job. Audit actor is `admin`, the name is in the payload.
    - Web: `/cleaner/:jobId` shows the decision and its reasons, and the per-item result on a rejected job.
-4. **Capture and Payouts, then webhooks** with signature verification (`PAYPAL_WEBHOOK_ID` is in `.env.example`; the webhook URL is the Render API).
+4. **Capture and Payouts, then webhooks** with signature verification (`PAYPAL_WEBHOOK_ID` is in `.env.example`; the webhook URL is the Render API). This is the next thing to build. Plan: `plans/capture-payouts.md` (branch `feature/capture-payouts`; decisions made: 100% payout to the cleaner, automatic capture after `RELEASED`, failed payouts stay `CAPTURED`). The policy engine (PR #4) is merged and was checked on the hosted site for the auto-release path only (job `999bae5c` reached `RELEASED`, audit chain intact); the reject and needs-approval paths are still untested there.
 5. **Admin UI** (approvals, audit log) and the rejection agent, then seed data and README setup.
 
 Known gaps in the shipped cleaner work (decide when the matching step is built):
