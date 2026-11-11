@@ -140,7 +140,7 @@ This phase covers the cleaner's session: redirects, expiry and list order. Befor
 **Session**
 
 - [x] No stored id redirects to `/cleaner/signup` and makes no API calls.
-- [x] `getCleaner` 404 clears the stored id and lands on `/cleaner/signup` with `state.expired === true`. Combined with Phase 3, the banner then shows.
+- [x] `getCleaner` 404 clears the stored id and lands on `/cleaner/signup` with `state.expired === true`. The banner itself is not asserted here; the Phase 3 banner test (`state: { expired: true }`) covers it, so a copy change in signup doesn't break a CleanerJobs test. An end-to-end check that the two agree on the state shape is optional, and would belong in a separate integration file.
 - [x] `getCleaner` 500 shows the error alert, and the id stays stored.
 - [x] On success, the heading reads "Ana's jobs". Before `getCleaner` resolves, it reads "Your jobs".
 

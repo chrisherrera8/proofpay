@@ -40,7 +40,6 @@ describe("CleanerJobs", () => {
       await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent("/cleaner/signup"));
       expect(screen.getByTestId("state")).toHaveTextContent('{"expired":true}');
       expect(localStorage.getItem("proofpay.cleanerId")).toBeNull();
-      expect(await screen.findByText(/that cleaner account has expired/i)).toBeInTheDocument();
     });
 
     it("shows the error and keeps the id when getCleaner is 500", async () => {
