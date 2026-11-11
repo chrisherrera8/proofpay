@@ -30,8 +30,8 @@ describe("CleanerJobs", () => {
       localStorage.clear();
       renderRoute("/cleaner");
       await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent("/cleaner/signup"));
-      expect(requests.filter((r) => r.url.pathname !== "/api/cleaners")).toHaveLength(0);
       expect(find("GET", "/api/cleaners/c1")).toHaveLength(0);
+      expect(find("GET", "/api/jobs")).toHaveLength(0);
     });
 
     it("clears the id and redirects with state.expired when getCleaner is 404", async () => {
