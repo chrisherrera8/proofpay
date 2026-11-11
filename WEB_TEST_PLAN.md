@@ -8,6 +8,7 @@ Work through the phases in order, one per branch or PR. Each phase reuses the he
 
 - **Tick tasks as you go.** Each box is one test or one small code change.
 - **Phase done when:** `npm test` passes, `npm run build` still passes, and you've watched each new test fail once (break the code or the assertion) so you know it can fail.
+- **Approval before every commit.** When a phase is done, stop and show what changed (files, test results and anything that deviates from the plan). Commit only after the owner approves. Phase 0 was committed before this rule was added.
 - **Query style:** use `getByRole` and `getByLabelText` first. Use `container.querySelector` only for the hidden file input.
 - **Check behaviour, not markup:** assert on text, roles and requests sent, never on Tailwind classes.
 - **Bugs found while testing:** note them in Phase 8 instead of fixing them mid-phase, unless the test can't pass without the fix.
