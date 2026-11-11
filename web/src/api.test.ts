@@ -11,7 +11,6 @@ import {
   photoUrl,
   uploadPhoto,
 } from "./api";
-import { makeJob } from "./test/fixtures";
 import { API } from "./test/handlers";
 import { find, requests } from "./test/requests";
 import { server } from "./test/server";
@@ -128,7 +127,6 @@ describe("success and requests", () => {
       service_date: "2026-11-20",
       amount: 10,
     };
-    server.use(http.post(`${API}/jobs`, () => HttpResponse.json(makeJob())));
     await createJob(body);
     const [req] = find("POST", "/api/jobs");
     expect(req.headers.get("content-type")).toBe("application/json");
