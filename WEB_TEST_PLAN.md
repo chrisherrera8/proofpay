@@ -77,36 +77,36 @@ These are fast and need no network. Use table tests (`it.each`) wherever there's
 
 **`lib/format.ts`**
 
-- [ ] `formatDay("2026-11-10")` shows the 10th in both `TZ=Pacific/Auckland` and `TZ=America/Los_Angeles`. `TZ` must be set before the first `Date` is used, so either add a second Vitest project with `env: { TZ }`, or run `TZ=... vitest run format`.
-- [ ] `todayLocal()` at 23:30 local and 00:30 local (with `setSystemTime`) returns the local date in both timezones.
-- [ ] `formatMoney("20.00")`, `formatMoney(20)` and `formatMoney(5, "EUR")`. Pin the locale or match loosely (`/20\.00/`).
+- [x] `formatDay("2026-11-10")` shows the 10th in both `TZ=Pacific/Auckland` and `TZ=America/Los_Angeles`. `TZ` must be set before the first `Date` is used, so either add a second Vitest project with `env: { TZ }`, or run `TZ=... vitest run format`.
+- [x] `todayLocal()` at 23:30 local and 00:30 local (with `setSystemTime`) returns the local date in both timezones.
+- [x] `formatMoney("20.00")`, `formatMoney(20)` and `formatMoney(5, "EUR")`. Pin the locale or match loosely (`/20\.00/`).
 
 **`lib/cleaner-session.ts`**
 
-- [ ] A set, get and clear round trip.
-- [ ] With `localStorage` methods replaced by ones that throw: `getCleanerId` returns `null`, and `set` and `clear` don't throw.
+- [x] A set, get and clear round trip.
+- [x] With `localStorage` methods replaced by ones that throw: `getCleanerId` returns `null`, and `set` and `clear` don't throw.
 
 **`tiers.ts`**
 
-- [ ] `tierById("deep")` finds the tier. `"nope"` and `null` return `undefined`.
+- [x] `tierById("deep")` finds the tier. `"nope"` and `null` return `undefined`.
 
 **`components/job-timeline.tsx`**
 
-- [ ] For each status, the step marked `aria-current="step"` matches `POSITION`.
-- [ ] `PAID_OUT`: every step reads "(done)" and none is current.
-- [ ] An unknown status falls back to step 0.
-- [ ] `REJECTED` shows "Some items need a re-clean". `PENDING_APPROVAL` shows "Waiting for a manager to approve".
+- [x] For each status, the step marked `aria-current="step"` matches `POSITION`.
+- [x] `PAID_OUT`: every step reads "(done)" and none is current.
+- [x] An unknown status falls back to step 0.
+- [x] `REJECTED` shows "Some items need a re-clean". `PENDING_APPROVAL` shows "Waiting for a manager to approve".
 
 **`components/status-badge.tsx`**
 
-- [ ] For each key in `STATUS`, the badge shows its label.
-- [ ] Unknown `"ON_HOLD"` renders `"on hold"`.
+- [x] For each key in `STATUS`, the badge shows its label.
+- [x] Unknown `"ON_HOLD"` renders `"on hold"`.
 
 **`components/field.tsx`**
 
-- [ ] Hint only: `aria-describedby="x-hint"`.
-- [ ] Error only: `aria-describedby="x-err"` and `aria-invalid="true"`.
-- [ ] Both set: the hint is hidden but its id stays in `aria-describedby`. Decide whether that's intended. As written, the id points at an element that isn't rendered. Log the result in Phase 8.
+- [x] Hint only: `aria-describedby="x-hint"`.
+- [x] Error only: `aria-describedby="x-err"` and `aria-invalid="true"`.
+- [x] Both set: the hint is hidden but its id stays in `aria-describedby`. Decide whether that's intended. As written, the id points at an element that isn't rendered. Log the result in Phase 8.
 
 ## Phase 3: CleanerSignup
 
