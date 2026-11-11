@@ -15,7 +15,9 @@
     "isolatedModules": true,
     "types": [
       "vite/client",
-      "node"
+      "node",
+      "vitest/globals",
+      "@testing-library/jest-dom"
     ],
     "baseUrl": ".",
     "paths": {
