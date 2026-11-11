@@ -38,7 +38,7 @@ describe("CleanerJobs", () => {
       server.use(http.get(`${API}/cleaners/:id`, () => HttpResponse.json({ detail: "gone" }, { status: 404 })));
       renderRoute("/cleaner");
       await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent("/cleaner/signup"));
-      expect(screen.getByTestId("state")).toHaveTextContent('{"expired":true}');
+      expect(JSON.parse(screen.getByTestId("state").textContent!)).toMatchObject({ expired: true });
       expect(localStorage.getItem("proofpay.cleanerId")).toBeNull();
     });
 
