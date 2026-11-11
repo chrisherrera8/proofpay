@@ -41,28 +41,21 @@ describe("errors", () => {
     expect(err.status).toBe(404);
   });
 
-  it("joins a 422 list detail and strips 'Value error, '", async () => {
-    server.use(
-      http.get(`${API}/jobs/j1`, () =>
-        HttpResponse.json(
-          {
-            detail: [
-              { loc: ["body", "name"], msg: "Value error, too long" },
-              { loc: ["body", "email"], msg: "bad" },
-            ],
-          },
-          { status: 422 },
-        ),
-      ),
-    );
+  it.each([
+    {
+      name: "joins list details by field and strips 'Value error, '",
+      detail: [
+        { loc: ["body", "name"], msg: "Value error, too long" },
+        { loc: ["body", "email"], msg: "bad" },
+      ],
+      message: "name: too long; email: bad",
+    },
+    { name: "shows 'field: invalid' for items without loc or msg", detail: [{}], message: "field: invalid" },
+  ])("422 $name", async ({ detail, message }) => {
+    server.use(http.get(`${API}/jobs/j1`, () => HttpResponse.json({ detail }, { status: 422 })));
     const err = await failure(getJob("j1"));
-    expect(err.message).toBe("name: too long; email: bad");
+    expect(err.message).toBe(message);
     expect(err.status).toBe(422);
-  });
-
-  it("shows 'field: invalid' for list items without loc or msg", async () => {
-    server.use(http.get(`${API}/jobs/j1`, () => HttpResponse.json({ detail: [{}] }, { status: 422 })));
-    expect((await failure(getJob("j1"))).message).toBe("field: invalid");
   });
 
   it("falls back when detail is an object", async () => {
