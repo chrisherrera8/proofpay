@@ -32,6 +32,8 @@ describe("CleanerJobs", () => {
       await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent("/cleaner/signup"));
       expect(find("GET", "/api/cleaners/c1")).toHaveLength(0);
       expect(find("GET", "/api/jobs")).toHaveLength(0);
+      // A plain redirect carries no expired flag: the router reports state as null.
+      expect(screen.getByTestId("state")).toHaveTextContent(/^null$/);
     });
 
     it("clears the id and redirects with state.expired when getCleaner is 404", async () => {
@@ -156,6 +158,7 @@ describe("CleanerJobs", () => {
       await user.click(await screen.findByRole("link", { name: "Switch cleaner" }));
       expect(localStorage.getItem("proofpay.cleanerId")).toBeNull();
       await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent("/cleaner/signup"));
+      expect(screen.getByTestId("state")).toHaveTextContent(/^null$/);
     });
   });
 });
