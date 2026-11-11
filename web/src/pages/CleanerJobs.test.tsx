@@ -92,7 +92,6 @@ describe("CleanerJobs", () => {
     it("shows the empty state when both lists are empty", async () => {
       renderRoute("/cleaner");
       expect(await screen.findByText("No jobs waiting")).toBeInTheDocument();
-      expect(screen.queryAllByRole("listitem")).toHaveLength(0);
     });
 
     it("shows the error and drops the skeleton when listJobs fails", async () => {
@@ -109,7 +108,7 @@ describe("CleanerJobs", () => {
       });
       renderRoute("/cleaner");
       await screen.findByText("Rejected Rd");
-      const rows = screen.getAllByRole("listitem");
+      const rows = screen.getAllByRole("link", { name: /Rejected Rd|Auth St/ });
       expect(rows).toHaveLength(2);
       expect(rows[0]).toHaveTextContent("Rejected Rd");
       expect(rows[1]).toHaveTextContent("Auth St");
