@@ -97,7 +97,7 @@ export default function CleanerSignup() {
           disabled={busy}
         />
         <p className="text-sm text-muted-foreground">Demo data, including your name and email, is deleted 24 hours after you sign up.</p>
-        {error && <div role="alert"><ErrorAlert message={error} /></div>}
+        {error && <ErrorAlert message={error} />}
         <Button type="submit" size="lg" className="h-11" disabled={busy}>
           {busy && <Loader2 className="animate-spin" aria-hidden />}
           {busy ? "Signing up" : "Sign up"}
