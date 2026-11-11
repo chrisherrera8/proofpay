@@ -14,6 +14,7 @@ afterEach(() => {
   server.resetHandlers();
   localStorage.clear();
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 afterAll(() => server.close());

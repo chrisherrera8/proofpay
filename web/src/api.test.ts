@@ -145,7 +145,6 @@ describe("success and requests", () => {
     expect(init?.method).toBe("POST");
     expect(init?.body).toBe(blob);
     expect(init?.headers).toEqual({ "Content-Type": "image/jpeg" });
-    fetchSpy.mockRestore();
   });
 
   it("photoUrl builds the photo endpoint URL", () => {
