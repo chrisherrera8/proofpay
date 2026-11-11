@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { CalendarDays, ChevronRight, Inbox } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Page } from "@/components/layout";
@@ -11,21 +11,22 @@ import { ApiError, Cleaner, getCleaner, Job, listJobs } from "../api";
 import { tierById } from "../tiers";
 
 export default function CleanerJobs() {
-  const navigate = useNavigate();
   const cleanerId = getCleanerId();
   const [cleaner, setCleaner] = useState<Cleaner | null>(null);
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expired, setExpired] = useState(false);
 
   useEffect(() => {
     if (!cleanerId) return;
-    // An expired cleaner is a 404: forget the id and send them to sign up again.
+    // An expired cleaner is a 404: forget the id and flag it. The no-id redirect below carries the flag,
+    // so it can't be overtaken by another re-render (StrictMode re-runs this effect in dev).
     getCleaner(cleanerId)
       .then(setCleaner)
       .catch((e) => {
         if (e instanceof ApiError && e.status === 404) {
           clearCleanerId();
-          navigate("/cleaner/signup", { replace: true, state: { expired: true } });
+          setExpired(true);
         } else {
           setError(e.message);
         }
@@ -34,9 +35,9 @@ export default function CleanerJobs() {
     Promise.all([listJobs("AUTHORIZED", cleanerId), listJobs("REJECTED", cleanerId)])
       .then(([a, r]) => setJobs([...r, ...a]))
       .catch((e) => setError(e.message));
-  }, [cleanerId, navigate]);
+  }, [cleanerId]);
 
-  if (!cleanerId) return <Navigate to="/cleaner/signup" replace />;
+  if (!cleanerId) return <Navigate to="/cleaner/signup" replace state={expired ? { expired: true } : undefined} />;
 
   return (
     <Page>

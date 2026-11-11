@@ -139,24 +139,24 @@ This phase covers the cleaner's session: redirects, expiry and list order. Befor
 
 **Session**
 
-- [ ] No stored id redirects to `/cleaner/signup` and makes no API calls.
-- [ ] `getCleaner` 404 clears the stored id and lands on `/cleaner/signup` with `state.expired === true`. Combined with Phase 3, the banner then shows.
-- [ ] `getCleaner` 500 shows the error alert, and the id stays stored.
-- [ ] On success, the heading reads "Ana's jobs". Before `getCleaner` resolves, it reads "Your jobs".
+- [x] No stored id redirects to `/cleaner/signup` and makes no API calls.
+- [x] `getCleaner` 404 clears the stored id and lands on `/cleaner/signup` with `state.expired === true`. Combined with Phase 3, the banner then shows.
+- [x] `getCleaner` 500 shows the error alert, and the id stays stored.
+- [x] On success, the heading reads "Ana's jobs". Before `getCleaner` resolves, it reads "Your jobs".
 
 **Job list**
 
-- [ ] While loading, the "Loading jobs" status shows.
-- [ ] When both lists are empty, "No jobs waiting" shows.
-- [ ] When `listJobs` fails, the error alert shows and the skeleton goes away.
-- [ ] Order: REJECTED jobs come before AUTHORIZED ones. Check the order of the link names.
-- [ ] The request recorder shows both calls carry `cleaner_id=c1`.
-- [ ] `service_type: "deep"` shows "Deep Clean". An unknown type shows its raw value. A null `service_date` shows "Date to be confirmed".
-- [ ] Each row links to `/cleaner/:id`.
+- [x] While loading, the "Loading jobs" status shows.
+- [x] When both lists are empty, "No jobs waiting" shows.
+- [x] When `listJobs` fails, the error alert shows and the skeleton goes away.
+- [x] Order: REJECTED jobs come before AUTHORIZED ones. Check the order of the link names.
+- [x] The request recorder shows both calls carry `cleaner_id=c1`.
+- [x] `service_type: "deep"` shows "Deep Clean". An unknown type shows its raw value. A null `service_date` shows "Date to be confirmed".
+- [x] Each row links to `/cleaner/:id`.
 
 **Switching cleaner**
 
-- [ ] Clicking "Switch cleaner" clears the stored id and lands on `/cleaner/signup`.
+- [x] Clicking "Switch cleaner" clears the stored id and lands on `/cleaner/signup`.
 
 ## Phase 5: Book
 
@@ -292,6 +292,7 @@ These are issues found while reading the code. Each one becomes a small change w
 
 **Code fixes**
 
+- [x] `CleanerJobs.tsx`: under `StrictMode` (dev only, not production) a `getCleaner` 404 lost `state.expired`, because the no-id `<Navigate>` overtook the imperative `navigate`. Fixed by keeping an `expired` flag and passing it in the `<Navigate>` state.
 - [ ] `api.ts:97`: wrap `res.json()` on success so that a body that isn't JSON throws an `ApiError` instead of "Unexpected end of JSON input".
 - [ ] `Book.tsx:52`: give `loadCleaners` (used after a 409) the same stale guard as the date effect, so a late list for an old date can't overwrite the current one.
 - [ ] `CleanerJob.tsx:34`: decide what happens to files beyond the 4-photo cap. Today they're silently dropped. A short "Only the first n were added" message is the likely fix.
