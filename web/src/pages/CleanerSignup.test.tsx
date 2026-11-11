@@ -2,6 +2,7 @@ import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { deferred } from "@/test/deferred";
 import { API } from "@/test/handlers";
 import { makeCleaner } from "@/test/fixtures";
 import { find } from "@/test/requests";
@@ -66,23 +67,25 @@ describe("CleanerSignup", () => {
     });
 
     it("shows a pending state and disables the inputs while the request is open", async () => {
-      let release!: () => void;
-      const gate = new Promise<void>((r) => (release = r));
+      const gate = deferred();
       server.use(
         http.post(`${API}/cleaners`, async () => {
-          await gate;
+          await gate.promise;
           return HttpResponse.json(makeCleaner());
         }),
       );
       const user = userEvent.setup();
       renderRoute("/cleaner/signup");
-      await fillValid(user);
-      await user.click(signUpButton());
-      const busy = await screen.findByRole("button", { name: "Signing up" });
-      expect(busy).toBeDisabled();
-      expect(nameBox()).toBeDisabled();
-      expect(emailBox()).toBeDisabled();
-      release();
+      try {
+        await fillValid(user);
+        await user.click(signUpButton());
+        const busy = await screen.findByRole("button", { name: "Signing up" });
+        expect(busy).toBeDisabled();
+        expect(nameBox()).toBeDisabled();
+        expect(emailBox()).toBeDisabled();
+      } finally {
+        gate.release();
+      }
       await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent(/^\/cleaner$/));
     });
 

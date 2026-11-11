@@ -4,6 +4,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setCleanerId } from "@/lib/cleaner-session";
 import { formatDay } from "@/lib/format";
+import { deferred } from "@/test/deferred";
 import { API } from "@/test/handlers";
 import { makeCleaner, makeJob } from "@/test/fixtures";
 import { requests, find } from "@/test/requests";
@@ -51,34 +52,38 @@ describe("CleanerJobs", () => {
     });
 
     it("greets the cleaner by name once loaded, and says 'Your jobs' before", async () => {
-      let release!: () => void;
-      const gate = new Promise<void>((r) => (release = r));
+      const gate = deferred();
       server.use(
         http.get(`${API}/cleaners/:id`, async () => {
-          await gate;
+          await gate.promise;
           return HttpResponse.json(makeCleaner({ name: "Ana" }));
         }),
       );
-      renderRoute("/cleaner");
-      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Your jobs");
-      release();
+      try {
+        renderRoute("/cleaner");
+        expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Your jobs");
+      } finally {
+        gate.release();
+      }
       expect(await screen.findByRole("heading", { level: 1, name: "Ana's jobs" })).toBeInTheDocument();
     });
   });
 
   describe("job list", () => {
     it("shows the loading status until the lists arrive", async () => {
-      let release!: () => void;
-      const gate = new Promise<void>((r) => (release = r));
+      const gate = deferred();
       server.use(
         http.get(`${API}/jobs`, async () => {
-          await gate;
+          await gate.promise;
           return HttpResponse.json([]);
         }),
       );
-      renderRoute("/cleaner");
-      expect(screen.getByRole("status", { name: "Loading jobs" })).toBeInTheDocument();
-      release();
+      try {
+        renderRoute("/cleaner");
+        expect(screen.getByRole("status", { name: "Loading jobs" })).toBeInTheDocument();
+      } finally {
+        gate.release();
+      }
       await screen.findByText("No jobs waiting");
       expect(screen.queryByRole("status", { name: "Loading jobs" })).not.toBeInTheDocument();
     });
