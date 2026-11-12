@@ -294,15 +294,15 @@ These are issues found while reading the code. Each one becomes a small change w
 **Code fixes**
 
 - [x] `CleanerJobs.tsx`: under `StrictMode` (dev only, not production) a `getCleaner` 404 lost `state.expired`, because the no-id `<Navigate>` overtook the imperative `navigate`. Fixed by keeping an `expired` flag and passing it in the `<Navigate>` state.
-- [ ] `api.ts:97`: wrap `res.json()` on success so that a body that isn't JSON throws an `ApiError` instead of "Unexpected end of JSON input".
+- [x] `api.ts:97`: wrap `res.json()` on success so that a body that isn't JSON throws an `ApiError` instead of "Unexpected end of JSON input".
 - [ ] `Book.tsx:52`: give `loadCleaners` (used after a 409) the same stale guard as the date effect, so a late list for an old date can't overwrite the current one.
 - [ ] `CleanerJob.tsx:34`: decide what happens to files beyond the 4-photo cap. Today they're silently dropped. A short "Only the first n were added" message is the likely fix.
-- [ ] `field.tsx:13`: when both a hint and an error are set, leave the hint id out of `aria-describedby` (the hint isn't rendered then).
+- [x] `field.tsx:13`: when both a hint and an error are set, leave the hint id out of `aria-describedby` (the hint isn't rendered then).
 - [ ] `Book.tsx:44`: the refs work around stale PayPal callbacks, but 8.9.2 already passes the latest props. Keep the refs as a safety net, and update the comment to say why.
 
 **Backend**
 
-- [ ] Add a pytest that checks the API accepts exactly 10, 20 and 30 for basic, deep and deluxe. `tiers.ts` says the prices must match, and nothing checks that today.
+- [x] Add a pytest that checks the API accepts exactly 10, 20 and 30 for basic, deep and deluxe. `tiers.ts` says the prices must match, and nothing checks that today.
 
 **Playwright (later, against mocked routes)**
 

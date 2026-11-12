@@ -24,10 +24,9 @@ describe("Field", () => {
     expect(screen.getByLabelText("Name")).not.toHaveAttribute("aria-describedby");
   });
 
-  it("both: hides the hint but still points at its id (logged for Phase 8)", () => {
+  it("both: hides the hint and only points at the error", () => {
     render(<Field id="x" label="Name" hint="As on your card" error="Enter your name." />);
     expect(screen.queryByText("As on your card")).not.toBeInTheDocument();
-    // Current behaviour: the id dangles. Phase 8 will drop "x-hint" here.
-    expect(screen.getByLabelText("Name")).toHaveAttribute("aria-describedby", "x-hint x-err");
+    expect(screen.getByLabelText("Name")).toHaveAttribute("aria-describedby", "x-err");
   });
 });

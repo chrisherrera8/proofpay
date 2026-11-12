@@ -94,7 +94,11 @@ async function request<T>(path: string, init?: RequestInit, contentType = "appli
     throw new ApiError(describe(detail, `Something went wrong (${res.status}). Please try again.`), res.status);
   }
   if (res.status === 204) return undefined as T;
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    throw new ApiError("The server sent an unexpected response. Please try again.", res.status);
+  }
 }
 
 export const createJob = (body: {

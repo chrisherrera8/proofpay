@@ -128,3 +128,12 @@ def test_list_jobs_and_status_filter(client, make_job, body):
     booked = client.get("/api/jobs", params={"status": "BOOKED"}).json()
     assert [j["status"] for j in booked] == ["BOOKED"]
     assert client.get("/api/jobs", params={"status": "BOGUS"}).status_code == 422
+
+
+# web/src/tiers.ts shows these prices to customers, so they must match what the API accepts.
+@pytest.mark.parametrize("tier,price", [("basic", "10.00"), ("deep", "20.00"), ("deluxe", "30.00")])
+def test_tier_prices_match_web(client, body, tier, price):
+    ok = client.post("/api/jobs", json={**body, "service_type": tier, "amount": price})
+    assert ok.status_code == 201
+    other = "20.00" if price != "20.00" else "10.00"
+    assert client.post("/api/jobs", json={**body, "service_type": tier, "amount": other}).status_code == 422

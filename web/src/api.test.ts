@@ -72,9 +72,7 @@ describe("errors", () => {
     expect(err.status).toBe(500);
   });
 
-  // Known bug (Phase 8): today this rejects with a raw SyntaxError. `it.fails` keeps the suite green
-  // until api.ts wraps the success-path `res.json()`; then remove `.fails`.
-  it.fails("throws an ApiError when an OK response isn't JSON", async () => {
+  it("throws an ApiError when an OK response isn't JSON", async () => {
     server.use(http.get(`${API}/jobs/j1`, () => HttpResponse.text("<html>oops</html>")));
     expect(await failure(getJob("j1"))).toBeInstanceOf(ApiError);
   });

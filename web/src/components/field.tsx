@@ -10,7 +10,7 @@ export function Field({ id, label, error, hint, className, ...props }: React.Com
   error?: string;
   hint?: string;
 }) {
-  const describedBy = [hint && `${id}-hint`, error && `${id}-err`].filter(Boolean).join(" ") || undefined;
+  const describedBy = [hint && !error && `${id}-hint`, error && `${id}-err`].filter(Boolean).join(" ") || undefined;
   return (
     <div className={cn("grid gap-2", className)}>
       <Label htmlFor={id}>{label}</Label>
