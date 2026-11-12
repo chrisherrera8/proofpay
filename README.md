@@ -11,7 +11,7 @@ tested code that a person configures.
 
 - **Live demo:** https://proofpay.chris88herrera.workers.dev (PayPal *sandbox* only, no real money).
   The API sleeps when idle, so the first request can take 30-60 seconds.
-- Built for the PayPal AI Hackathon (Devpost).
+- Built for the PayPal AI Hackathon (Devpost). The project write-up is in [DEVPOST.md](DEVPOST.md).
 
 ## How a job flows
 
