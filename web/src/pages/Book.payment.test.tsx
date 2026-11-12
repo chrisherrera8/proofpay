@@ -102,7 +102,16 @@ describe("Book: makeOrder (through createOrder)", () => {
       cleaner_id: "c1",
       service_date: "2026-11-20",
       amount: 20,
+      strict_check: false,
     });
+  });
+
+  it("sends strict_check: true when Strict check is ticked", async () => {
+    const user = userEvent.setup();
+    await ready();
+    await user.click(screen.getByRole("checkbox", { name: /Strict check/ }));
+    await createOrder();
+    expect(createJobs()[0].body).toMatchObject({ strict_check: true });
   });
 
   it("reuses the job when called twice with identical details", async () => {

@@ -29,6 +29,7 @@ export const makeJob = (overrides: Partial<Job> = {}): Job => ({
   cleaner_name: "Ana",
   amount: "10.00",
   currency: "USD",
+  strict_check: false,
   checklist_items: [{ id: 1, label: "Wipe the counters", required: true, position: 1 }],
   verification: null,
   decision: null,

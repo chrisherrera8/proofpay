@@ -40,6 +40,7 @@ def create_job(body: JobCreate, db: Session = Depends(get_db)) -> Job:
         service_type=body.service_type,
         cleaner_id=cleaner.id,
         service_date=body.service_date,
+        strict_check=body.strict_check,
         # Whole-day booking: scheduled_at is only a display value, noon UTC so it falls on the same calendar day
         # in every common timezone. service_date is what counts.
         scheduled_at=datetime.combine(body.service_date, time(12), tzinfo=timezone.utc),
@@ -65,6 +66,7 @@ def create_job(body: JobCreate, db: Session = Depends(get_db)) -> Job:
             "service_date": job.service_date,
             "amount": job.amount,
             "currency": job.currency,
+            "strict_check": job.strict_check,
         },
     )
     db.commit()

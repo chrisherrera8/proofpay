@@ -231,6 +231,11 @@ export default function CleanerJob() {
           <StatusBadge status={job.status} />
         </div>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">{job.address}</h1>
+        {job.strict_check && (
+          <p className="mt-3 rounded-lg bg-warning px-3 py-2 text-sm text-warning-foreground">
+            Strict check: every checklist item must be clearly visible in your after photos, or it counts as failed.
+          </p>
+        )}
         <dl className="mt-6 grid gap-4 border-t pt-5 sm:grid-cols-2">
           <div>
             <dt className="text-sm text-muted-foreground">Service date</dt>

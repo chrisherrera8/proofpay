@@ -154,3 +154,13 @@ def test_tier_prices_match_web(client, body, tier, price):
     assert ok.status_code == 201
     other = "20.00" if price != "20.00" else "10.00"
     assert client.post("/api/jobs", json={**body, "service_type": tier, "amount": other}).status_code == 422
+
+
+def test_strict_check_defaults_off(client, body):
+    assert client.post("/api/jobs", json=body).json()["strict_check"] is False
+
+
+def test_strict_check_can_be_enabled(client, body):
+    r = client.post("/api/jobs", json={**body, "strict_check": True})
+    assert r.status_code == 201
+    assert r.json()["strict_check"] is True

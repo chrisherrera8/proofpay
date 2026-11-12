@@ -9,6 +9,7 @@ export interface Job {
   service_type: string;
   scheduled_at: string;
   service_date: string | null; // YYYY-MM-DD
+  strict_check: boolean; // unseen checklist items fail the photo check
   cleaner_id: string | null;
   cleaner_name: string | null; // null once the cleaner's data was deleted
   amount: string;
@@ -109,6 +110,7 @@ export const createJob = (body: {
   cleaner_id: string;
   service_date: string; // YYYY-MM-DD
   amount: number;
+  strict_check?: boolean;
 }) => request<Job>("/api/jobs", { method: "POST", body: JSON.stringify(body) });
 
 export const createOrder = (jobId: string) =>

@@ -255,3 +255,25 @@ def test_null_or_missing_note_is_empty_not_the_word_none():
     no_note = {k: v for k, v in item("Kitchen").items() if k != "note"}
     assert score_answer({"items": [no_note]}, ["Kitchen"], "m").items[0].note == ""
     assert score_answer({"items": [item("Kitchen") | {"note": 0}]}, ["Kitchen"], "m").items[0].note == ""
+
+
+def test_strict_unseen_item_fails_the_check():
+    data = {"items": [item("Kitchen"), item("Bathroom", visible=False), item("Floors")]}
+    lax = score_answer(data, CHECK, "m")
+    strict = score_answer(data, CHECK, "m", strict=True)
+    assert lax.overall_pass is True
+    assert strict.overall_pass is False
+    assert strict.items[1].passed is False and strict.items[1].visible is True  # counted, so the policy sees it
+    assert strict.score == 0.67
+
+
+def test_strict_skipped_item_fails_and_all_seen_passes():
+    skipped = score_answer({"items": [item("Kitchen")]}, ["Kitchen", "Floors"], "m", strict=True)
+    assert skipped.overall_pass is False and skipped.items[1].passed is False and skipped.score == 0.5
+    seen = score_answer({"items": [item(c) for c in CHECK]}, CHECK, "m", strict=True)
+    assert seen.overall_pass is True and seen.score == 1.0
+
+
+def test_strict_prompt_says_visibility_counts():
+    assert "STRICT CHECK" in build_prompt(CHECK, 1, 1, strict=True)
+    assert "STRICT CHECK" not in build_prompt(CHECK, 1, 1)

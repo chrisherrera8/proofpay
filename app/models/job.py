@@ -44,6 +44,8 @@ class Job(Base):
     # The cleaner is booked for this whole day. cleaner_id goes NULL when the cleaner is purged (the job stays).
     cleaner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cleaners.id", ondelete="SET NULL"), index=True)
     service_date: Mapped[date | None] = mapped_column(Date)
+    # Strict check: a checklist item that isn't visible in the after photos fails, instead of being skipped.
+    strict_check: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

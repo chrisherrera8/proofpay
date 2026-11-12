@@ -21,6 +21,7 @@ class JobCreate(BaseModel):
     service_date: date
     amount: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
     currency: Literal["USD"] = "USD"
+    strict_check: bool = False
 
     @field_validator("service_date")
     @classmethod
@@ -136,6 +137,7 @@ class JobOut(BaseModel):
     cleaner_id: uuid.UUID | None = None
     cleaner_name: str | None = None
     service_date: date | None = None
+    strict_check: bool = False
     checklist_items: list[ChecklistItemOut]
     payment: PaymentSummary | None
     verification: VerificationOut | None = None

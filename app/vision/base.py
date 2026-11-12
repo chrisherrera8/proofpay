@@ -48,10 +48,12 @@ class VisionResult:
 class VisionProvider(Protocol):
     model: str
 
-    def verify(self, before: list[ImageInput], after: list[ImageInput], checklist: list[str]) -> VisionResult: ...
+    def verify(
+        self, before: list[ImageInput], after: list[ImageInput], checklist: list[str], strict: bool = False
+    ) -> VisionResult: ...
 
 
-def build_prompt(checklist: list[str], n_before: int, n_after: int) -> str:
+def build_prompt(checklist: list[str], n_before: int, n_after: int, strict: bool = False) -> str:
     if n_before == 1 and n_after == 1:
         layout = "Image 1 is BEFORE, image 2 is AFTER, same room. "
     else:
@@ -59,14 +61,24 @@ def build_prompt(checklist: list[str], n_before: int, n_after: int) -> str:
             f"Images 1-{n_before} are BEFORE photos and images {n_before + 1}-{n_before + n_after} "
             "are AFTER photos, taken around the same home. "
         )
+    if strict:
+        visibility = (
+            "STRICT CHECK: visibility counts. Every checklist item must be clearly visible in the "
+            "AFTER photos. If an item is not visible, mark it visible=false and pass=false, and fail "
+            "overall. Also fail the items if the photos are the same, unrelated to each other, "
+            "or too unclear to judge. "
+        )
+    else:
+        visibility = (
+            "The cleaner may have photographed only part of the home. If an item is not visible "
+            "in the AFTER photos, mark it visible=false and pass=true (not applicable) and do not "
+            "let it count against the result; judge overall_pass and score only on the items you can see. "
+            "Still fail the visible items if the photos are the same, unrelated to each other, "
+            "or too unclear to judge, and fail overall if none of the items are visible. "
+        )
     return (
         "You verify home-cleaning work. " + layout +
-        "Judge each checklist item from the AFTER photos, using BEFORE for comparison. "
-        "The cleaner may have photographed only part of the home. If an item is not visible "
-        "in the AFTER photos, mark it visible=false and pass=true (not applicable) and do not "
-        "let it count against the result; judge overall_pass and score only on the items you can see. "
-        "Still fail the visible items if the photos are the same, unrelated to each other, "
-        "or too unclear to judge, and fail overall if none of the items are visible. "
+        "Judge each checklist item from the AFTER photos, using BEFORE for comparison. " + visibility +
         "Reply with JSON only: "
         '{"items":[{"item":str,"visible":bool,"pass":bool,"confidence":number 0-1,"note":str}],'
         '"overall_pass":bool,"score":number 0-1}\nChecklist:\n'
@@ -116,12 +128,17 @@ def _as_bool(v, default: bool) -> bool:
     return default
 
 
-def score_answer(data: dict, checklist: list[str], model: str, in_tok: int = 0, out_tok: int = 0) -> VisionResult:
+def score_answer(
+    data: dict, checklist: list[str], model: str, in_tok: int = 0, out_tok: int = 0, strict: bool = False
+) -> VisionResult:
     """Turn the model's JSON into a VisionResult with one entry per checklist item, in checklist order.
 
     An item the model skipped counts as not visible. overall_pass is computed here: at least one item
     visible and every visible item passing. The model's own overall_pass and score are ignored for the
     decision; the score is the share of visible items that passed, so it can't be talked up.
+
+    With strict=True visibility counts: an item that isn't visible (or that the model skipped) fails, so
+    overall_pass needs every checklist item to pass and the score is the share of all items that passed.
     """
     raw_items = data.get("items")
     if not isinstance(raw_items, list):
@@ -132,12 +149,19 @@ def score_answer(data: dict, checklist: list[str], model: str, in_tok: int = 0, 
     for label in checklist:
         x = by_label.get(label.strip().lower())
         if x is None:
-            items.append(ItemResult(label, False, True, 0.0, "Not assessed by the model"))
+            # Strict: an item the model skipped is recorded as counted and failed, so the policy engine sees a failure.
+            items.append(ItemResult(label, strict, not strict, 0.0, "Not assessed by the model"))
             continue
         visible = _as_bool(x.get("visible"), True)
-        # Not-visible items are not applicable: they never fail the job.
+        note = str(x.get("note") or "")[:500]
+        if not visible and strict:
+            # Strict: unseen means failed. Recorded as visible=True so the policy engine (which ignores unseen
+            # items) counts it as a failure; the note says why.
+            items.append(ItemResult(label, True, False, _clamp01(x.get("confidence")), ("Not visible in the after photos. " + note).strip()[:500]))
+            continue
+        # Not-visible items are not applicable and never fail the job.
         passed = True if not visible else _as_bool(x.get("pass"), False)
-        items.append(ItemResult(label, visible, passed, _clamp01(x.get("confidence")), str(x.get("note") or "")[:500]))
+        items.append(ItemResult(label, visible, passed, _clamp01(x.get("confidence")), note))
 
     visible_items = [i for i in items if i.visible]
     overall = bool(visible_items) and all(i.passed for i in visible_items)
