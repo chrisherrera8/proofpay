@@ -107,7 +107,7 @@ export default function CleanerJobs() {
     // The list stays mounted while jobs open beside it, so it keeps its scroll, filter and data.
     // Side by side the page fills the viewport below the sticky header (h-16) and each pane scrolls on its own.
     <div className="flex w-full lg:h-[calc(100dvh-4rem)]">
-      <div className={cn("w-full shrink-0 px-4 py-8 sm:px-6 sm:py-12 lg:w-[28rem] lg:overflow-y-auto lg:border-r lg:py-8", open && "hidden lg:block")}>
+      <div className={cn("w-full shrink-0 px-4 py-8 sm:px-6 sm:py-12 lg:w-112 lg:overflow-y-auto lg:border-r lg:py-8", open && "hidden lg:block")}>
       <h1 className="text-3xl font-semibold">{cleaner ? `${cleaner.name}'s jobs` : "Your jobs"}</h1>
       <p className="mt-2 text-muted-foreground">All your jobs. Anything that needs your attention is listed first.</p>
 

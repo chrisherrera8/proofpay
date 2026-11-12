@@ -225,7 +225,7 @@ export default function CleanerJob() {
       </Link>
       <header className="mt-3 rounded-2xl border bg-card p-6 shadow-xs lg:mt-0 sm:p-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
+          <p className="text-sm font-medium text-muted-foreground">
             {tierById(job.service_type)?.name ?? job.service_type}
           </p>
           <StatusBadge status={job.status} />
@@ -233,21 +233,21 @@ export default function CleanerJob() {
         <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">{job.address}</h1>
         <dl className="mt-6 grid gap-4 border-t pt-5 sm:grid-cols-2">
           <div>
-            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Service date</dt>
+            <dt className="text-sm text-muted-foreground">Service date</dt>
             <dd className="mt-1 flex items-center gap-1.5 font-medium">
               <CalendarDays className="size-4 text-muted-foreground" aria-hidden />
               {job.service_date ? formatDay(job.service_date) : formatWhen(job.scheduled_at)}
             </dd>
           </div>
           <div>
-            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Job value</dt>
+            <dt className="text-sm text-muted-foreground">Job value</dt>
             <dd className="mt-1 font-medium tabular-nums">{formatMoney(job.amount, job.currency)}</dd>
           </div>
         </dl>
       </header>
 
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
-      <div className="grid gap-6">
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-3">
+      <div className="grid gap-6 xl:col-span-2">
         <DecisionPanel job={job} />
         <PaymentPanel job={job} working={working} onRetry={() => run(settleJob)} />
 
