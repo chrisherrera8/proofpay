@@ -334,7 +334,7 @@ export default function CleanerJob() {
         <SectionCard title="Progress">
           <JobTimeline status={job.status} />
         </SectionCard>
-        {(job.status === "BOOKED" || job.status === "PAID_OUT") && (
+        {(job.status === "BOOKED" || job.status === "PAID_OUT" || (job.status === "CAPTURED" && job.payout?.status === "FAILED")) && (
           <Button variant="outline" className="h-11 w-full text-destructive" disabled={working} onClick={remove}>
             <Trash2 aria-hidden /> Delete job
           </Button>

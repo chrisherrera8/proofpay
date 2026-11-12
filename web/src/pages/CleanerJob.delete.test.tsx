@@ -29,6 +29,16 @@ describe("CleanerJob delete", () => {
     expect(screen.getByRole("button", DELETE)).toBeInTheDocument();
   });
 
+  it("offers Delete for a CAPTURED job whose payout failed", async () => {
+    await open(makeJob({ id: "j1", status: "CAPTURED", payout: { amount: "10.00", status: "FAILED" } }));
+    expect(screen.getByRole("button", DELETE)).toBeInTheDocument();
+  });
+
+  it("hides Delete for a CAPTURED job whose payout is pending", async () => {
+    await open(makeJob({ id: "j1", status: "CAPTURED", payout: { amount: "10.00", status: "PENDING" } }));
+    expect(screen.queryByRole("button", DELETE)).not.toBeInTheDocument();
+  });
+
   it.each(["AUTHORIZED", "SUBMITTED", "PENDING_APPROVAL", "RELEASED", "CAPTURED", "REJECTED"] as const)(
     "hides Delete for a %s job (money is held)",
     async (status) => {

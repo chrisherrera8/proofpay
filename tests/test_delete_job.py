@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app.db import get_db
 from app.main import app
-from app.models import AuditLog, ChecklistItem, Job, Payment, Photo
+from app.models import AuditLog, ChecklistItem, Job, Payment, Payout, Photo
 
 
 @pytest.fixture
@@ -32,6 +32,24 @@ def test_delete_removes_job_and_children(client, db, make_job, status):
         assert db.scalar(select(model).where(model.job_id == job_id)) is None
     assert db.scalar(select(AuditLog).where(AuditLog.job_id == job_id, AuditLog.event == "JOB_DELETED"))
     assert client.get(f"/api/jobs/{job_id}").status_code == 404
+
+
+def test_delete_allowed_when_payout_failed(client, db, make_job):
+    job = make_job("CAPTURED")
+    job_id = job.id
+    db.add(Payout(job_id=job_id, status="FAILED", amount=job.amount))
+    db.commit()
+    assert client.delete(f"/api/jobs/{job_id}").status_code == 204
+    db.expire_all()
+    assert db.get(Job, job_id) is None
+
+
+@pytest.mark.parametrize("payout_status", ["PENDING", "SUCCESS"])
+def test_delete_refused_when_captured_payout_not_failed(client, db, make_job, payout_status):
+    job = make_job("CAPTURED")
+    db.add(Payout(job_id=job.id, status=payout_status, amount=job.amount))
+    db.commit()
+    assert client.delete(f"/api/jobs/{job.id}").status_code == 409
 
 
 @pytest.mark.parametrize("status", ["AUTHORIZED", "SUBMITTED", "PENDING_APPROVAL", "RELEASED", "CAPTURED", "REJECTED"])
