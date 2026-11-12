@@ -32,7 +32,7 @@ export default function CleanerJobs() {
         }
       });
     // AUTHORIZED = paid-for and waiting for the cleaner; REJECTED = needs a re-clean.
-    Promise.all([listJobs("AUTHORIZED", cleanerId), listJobs("REJECTED", cleanerId)])
+    Promise.all([listJobs(cleanerId, { status: "AUTHORIZED" }), listJobs(cleanerId, { status: "REJECTED" })])
       .then(([a, r]) => setJobs([...r, ...a]))
       .catch((e) => setError(e.message));
   }, [cleanerId]);

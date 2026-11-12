@@ -122,8 +122,12 @@ export const authorize = (jobId: string, orderId: string) =>
 
 export const getJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}`);
 
-export const listJobs = (status: string, cleanerId: string) =>
-  request<Job[]>(`/api/jobs?status=${encodeURIComponent(status)}&cleaner_id=${encodeURIComponent(cleanerId)}`);
+export const listJobs = (cleanerId: string, opts: { status?: string; limit?: number } = {}) => {
+  const params = new URLSearchParams({ cleaner_id: cleanerId });
+  if (opts.status !== undefined) params.set("status", opts.status);
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  return request<Job[]>(`/api/jobs?${params}`);
+};
 
 export const signUp = (body: { name: string; paypal_email: string }) =>
   request<Cleaner>("/api/cleaners", { method: "POST", body: JSON.stringify(body) });
