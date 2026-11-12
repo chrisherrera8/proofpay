@@ -157,4 +157,6 @@ export const submitJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}/sub
 export const verifyJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}/verify`, { method: "POST" });
 
 // Does the next missing payment step (capture, payout, or checking whether the payout landed).
+export const deleteJob = (jobId: string) => request<void>(`/api/jobs/${jobId}`, { method: "DELETE" });
+
 export const settleJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}/settle`, { method: "POST" });

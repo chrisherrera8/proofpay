@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { CalendarDays, Camera, ChevronLeft, CircleCheck, CircleMinus, CircleX, Clock, Loader2, Plus, RotateCcw, Unlock, X } from "lucide-react";
+import { Link, useOutletContext, useParams } from "react-router-dom";
+import { CalendarDays, Camera, ChevronLeft, CircleCheck, CircleMinus, CircleX, Clock, Loader2, Plus, RotateCcw, Trash2, Unlock, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Page } from "@/components/layout";
 import { JobTimeline } from "@/components/job-timeline";
@@ -10,7 +10,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { formatDay, formatMoney, formatWhen } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { tierById } from "../tiers";
-import { deletePhoto, getJob, Job, listPhotos, Photo, photoUrl, settleJob, submitJob, uploadPhoto, verifyJob } from "../api";
+import type { CleanerJobsContext } from "./CleanerJobs";
+import { deleteJob, deletePhoto, getJob, Job, listPhotos, Photo, photoUrl, settleJob, submitJob, uploadPhoto, verifyJob } from "../api";
 import { resizeImage } from "../resize";
 
 const MAX_PER_KIND = 4;
@@ -179,6 +180,7 @@ export default function CleanerJob() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
+  const parent = useOutletContext<CleanerJobsContext | null>();
 
   // Tracks the job on screen so a slow response for a previous job is dropped.
   const currentJobId = useRef(jobId);
@@ -208,6 +210,19 @@ export default function CleanerJob() {
       setError((e as Error).message);
       refresh(); // the job may now be SUBMITTED (vision failed): show the retry button
     } finally {
+      setWorking(false);
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm("Delete this job? This permanently removes it and its photos.")) return;
+    setWorking(true);
+    setError("");
+    try {
+      await deleteJob(jobId);
+      parent?.onDeleted(jobId);
+    } catch (e) {
+      setError((e as Error).message);
       setWorking(false);
     }
   }
@@ -319,6 +334,11 @@ export default function CleanerJob() {
         <SectionCard title="Progress">
           <JobTimeline status={job.status} />
         </SectionCard>
+        {(job.status === "BOOKED" || job.status === "PAID_OUT") && (
+          <Button variant="outline" className="h-11 w-full text-destructive" disabled={working} onClick={remove}>
+            <Trash2 aria-hidden /> Delete job
+          </Button>
+        )}
       </aside>
       </div>
     </div>

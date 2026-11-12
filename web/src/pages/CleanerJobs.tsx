@@ -14,6 +14,8 @@ import { tierById } from "../tiers";
 
 const JOB_LIMIT = 200;
 
+export type CleanerJobsContext = { onDeleted: (jobId: string) => void };
+
 // Below lg the list and the open job are alternate screens, so auto-opening a job would hide the list.
 const isSplitView = () => window.matchMedia("(min-width: 1024px)").matches;
 
@@ -162,7 +164,10 @@ export default function CleanerJobs() {
         )}
       >
         {/* Keyed so switching jobs never flashes the previous job's data. */}
-        <Outlet key={jobId} />
+        <Outlet key={jobId} context={{ onDeleted: (id: string) => {
+          setJobs((js) => js && js.filter((j) => j.id !== id));
+          navigate({ pathname: "/cleaner", search: location.search }, { replace: true });
+        } } satisfies CleanerJobsContext} />
       </div>
     </div>
   );
