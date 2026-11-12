@@ -105,9 +105,9 @@ export default function CleanerJobs() {
 
   return (
     // The list stays mounted while jobs open beside it, so it keeps its scroll, filter and data.
-    // Both panes sit in a centred row: the detail pane growing from 0 pushes the list left.
-    <div className="mx-auto flex w-full max-w-6xl justify-center px-4 py-8 sm:px-6 sm:py-12">
-      <div className={cn("w-full max-w-xl shrink-0 lg:w-[26rem] lg:max-w-none", open && "hidden lg:block")}>
+    // Side by side the page fills the viewport below the sticky header (h-16) and each pane scrolls on its own.
+    <div className="flex w-full lg:h-[calc(100dvh-4rem)]">
+      <div className={cn("w-full shrink-0 px-4 py-8 sm:px-6 sm:py-12 lg:w-[28rem] lg:overflow-y-auto lg:border-r lg:py-8", open && "hidden lg:block")}>
       <h1 className="text-3xl font-semibold">{cleaner ? `${cleaner.name}'s jobs` : "Your jobs"}</h1>
       <p className="mt-2 text-muted-foreground">All your jobs. Anything that needs your attention is listed first.</p>
 
@@ -157,8 +157,8 @@ export default function CleanerJobs() {
       </div>
       <div
         className={cn(
-          "min-w-0 overflow-hidden transition-[width,margin,opacity] duration-300 ease-out motion-reduce:transition-none",
-          open ? "w-full opacity-100 lg:ml-8 lg:w-[34rem]" : "w-0 opacity-0",
+          "min-w-0 overflow-x-hidden px-4 transition-[opacity] duration-300 ease-out motion-reduce:transition-none sm:px-6 lg:overflow-y-auto lg:px-10",
+          open ? "w-full flex-1 opacity-100" : "w-0 flex-none px-0 opacity-0 sm:px-0 lg:px-0",
         )}
       >
         {/* Keyed so switching jobs never flashes the previous job's data. */}
