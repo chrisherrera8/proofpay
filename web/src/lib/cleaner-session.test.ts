@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { clearCleanerId, getCleanerId, setCleanerId } from "./cleaner-session";
+import { clearCleanerId, getCleanerId, KEY, setCleanerId } from "./cleaner-session";
 
 describe("cleaner session", () => {
   it("round-trips set, get and clear", () => {
     expect(getCleanerId()).toBeNull();
     setCleanerId("c1");
     expect(getCleanerId()).toBe("c1");
-    expect(localStorage.getItem("proofpay.cleanerId")).toBe("c1");
+    expect(localStorage.getItem(KEY)).toBe("c1");
     clearCleanerId();
     expect(getCleanerId()).toBeNull();
   });

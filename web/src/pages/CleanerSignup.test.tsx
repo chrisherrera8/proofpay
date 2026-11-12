@@ -2,6 +2,7 @@ import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { getCleanerId } from "@/lib/cleaner-session";
 import { deferred } from "@/test/deferred";
 import { API } from "@/test/handlers";
 import { makeCleaner } from "@/test/fixtures";
@@ -63,7 +64,7 @@ describe("CleanerSignup", () => {
       await user.click(signUpButton());
       await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent(/^\/cleaner$/));
       expect(find("POST", "/api/cleaners")[0].body).toEqual({ name: "Ana", paypal_email: "ana@example.com" });
-      expect(localStorage.getItem("proofpay.cleanerId")).toBe("new-id");
+      expect(getCleanerId()).toBe("new-id");
     });
 
     it("shows a pending state and disables the inputs while the request is open", async () => {
@@ -109,7 +110,7 @@ describe("CleanerSignup", () => {
       expect(nameBox()).toBeEnabled();
       expect(emailBox()).toBeEnabled();
       expect(screen.getByTestId("pathname")).toHaveTextContent("/cleaner/signup");
-      expect(localStorage.getItem("proofpay.cleanerId")).toBeNull();
+      expect(getCleanerId()).toBeNull();
     });
 
     it("clears the alert when the user types again", async () => {
@@ -145,7 +146,7 @@ describe("CleanerSignup", () => {
       const user = userEvent.setup();
       renderRoute("/cleaner/signup");
       await user.click(await screen.findByRole("button", { name: "Continue as Demo" }));
-      expect(localStorage.getItem("proofpay.cleanerId")).toBe("seed1");
+      expect(getCleanerId()).toBe("seed1");
       await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent(/^\/cleaner$/));
     });
 

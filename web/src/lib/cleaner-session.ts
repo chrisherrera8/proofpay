@@ -1,6 +1,6 @@
 // The signed-in cleaner is just an id in localStorage: a convenience filter, not security.
 // Storage can throw (private windows, blocked site data), so every access is wrapped.
-const KEY = "proofpay.cleanerId";
+export const KEY = "proofpay.cleanerId";
 
 export function getCleanerId(): string | null {
   try {

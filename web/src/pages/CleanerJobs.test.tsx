@@ -2,7 +2,7 @@ import { http, HttpResponse } from "msw";
 import { beforeEach, describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { setCleanerId } from "@/lib/cleaner-session";
+import { getCleanerId, setCleanerId } from "@/lib/cleaner-session";
 import { formatDay } from "@/lib/format";
 import { deferred } from "@/test/deferred";
 import { API } from "@/test/handlers";
@@ -41,7 +41,7 @@ describe("CleanerJobs", () => {
       renderRoute("/cleaner");
       await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent("/cleaner/signup"));
       expect(JSON.parse(screen.getByTestId("state").textContent!)).toMatchObject({ expired: true });
-      expect(localStorage.getItem("proofpay.cleanerId")).toBeNull();
+      expect(getCleanerId()).toBeNull();
     });
 
     it("shows the error and keeps the id when getCleaner is 500", async () => {
@@ -49,7 +49,7 @@ describe("CleanerJobs", () => {
       renderRoute("/cleaner");
       expect(await screen.findByRole("alert")).toHaveTextContent("boom");
       expect(screen.getByTestId("pathname")).toHaveTextContent(/^\/cleaner$/);
-      expect(localStorage.getItem("proofpay.cleanerId")).toBe("c1");
+      expect(getCleanerId()).toBe("c1");
     });
 
     it("greets the cleaner by name once loaded, and says 'Your jobs' before", async () => {
@@ -155,7 +155,7 @@ describe("CleanerJobs", () => {
       const user = userEvent.setup();
       renderRoute("/cleaner");
       await user.click(await screen.findByRole("link", { name: "Switch cleaner" }));
-      expect(localStorage.getItem("proofpay.cleanerId")).toBeNull();
+      expect(getCleanerId()).toBeNull();
       await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent("/cleaner/signup"));
       expect(screen.getByTestId("state")).toHaveTextContent(/^null$/);
     });
