@@ -216,6 +216,15 @@ describe("Book: cleaner picker", () => {
 
   it("keeps the newest date's list when an older response arrives last", async () => {
     const first = deferred();
+    const staleSent = new Promise<void>((resolve) => {
+      const onMocked = ({ request }: { request: Request }) => {
+        if (new URL(request.url).searchParams.get("date") === "2026-11-20") {
+          server.events.removeListener("response:mocked", onMocked);
+          resolve();
+        }
+      };
+      server.events.on("response:mocked", onMocked);
+    });
     server.use(
       http.get(`${API}/cleaners`, async ({ request }) => {
         const date = new URL(request.url).searchParams.get("date");
@@ -235,9 +244,11 @@ describe("Book: cleaner picker", () => {
     } finally {
       first.release();
     }
-    // Let the stale response land, then check it was ignored.
+    // Wait for the server to actually send the stale response, then let the
+    // client consume it before checking it was ignored.
+    await staleSent;
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 0));
     });
     expect(find("GET", "/api/cleaners")).toHaveLength(2);
     expect(screen.getByRole("radio", { name: /^New/ })).toBeInTheDocument();
