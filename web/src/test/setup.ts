@@ -8,6 +8,19 @@ beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
   startRecording(server);
 });
+// jsdom has no matchMedia. Default to a narrow screen; tests can override window.matchMedia for the split view.
+beforeEach(() => {
+  window.matchMedia = (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  });
+});
 beforeEach(resetRequests);
 afterEach(() => {
   cleanup();

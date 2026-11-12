@@ -36,6 +36,29 @@ describe("CleanerJobs", () => {
     });
   });
 
+  describe("auto-open", () => {
+    const jobs = () => [makeJob({ id: "j1", address: "1 Alpha St" }), makeJob({ id: "j2", address: "2 Beta St" })];
+
+    it("opens the first job on load when the screen is wide", async () => {
+      const base = window.matchMedia;
+      window.matchMedia = (q) => ({ ...base(q), matches: true }) as MediaQueryList;
+      const [a, b] = jobs();
+      serveJobs([a, b]);
+      serveJob(a);
+      renderRoute("/cleaner");
+      expect(await screen.findByRole("heading", { level: 1, name: "1 Alpha St" })).toBeInTheDocument();
+    });
+
+    it("leaves the list showing when the screen is narrow", async () => {
+      const [a, b] = jobs();
+      serveJobs([a, b]);
+      serveJob(a);
+      renderRoute("/cleaner");
+      await screen.findByRole("link", { name: /1 Alpha St/ });
+      expect(screen.queryByRole("heading", { level: 1, name: "1 Alpha St" })).not.toBeInTheDocument();
+    });
+  });
+
   describe("session", () => {
     it("redirects to signup without calling the API when no id is stored", async () => {
       localStorage.clear();
