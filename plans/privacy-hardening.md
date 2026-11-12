@@ -19,11 +19,13 @@ The PayPal email is never returned by any endpoint (`CleanerOut`); keep it that 
 
 ## Recommended order
 
-1. **Item 1** (small, closes the real leak). Ship on its own PR.
+1. ~~**Item 1** (small, closes the real leak). Ship on its own PR.~~ **Done.**
 2. **Items 2 and 3** together (both need the per-cleaner token), on a second PR. Skip them if the demo stays private or low-stakes, and document the risk in the README instead.
 3. **Item 4** is out of scope. Re-check it after items 1-3.
 
-## Item 1: `GET /api/jobs` must be scoped
+## Item 1: `GET /api/jobs` must be scoped — DONE
+
+**Status: completed.** `cleaner_id` is now required on `GET /api/jobs` (422 without it), `listJobs` requires the cleaner id, and tests cover both.
 
 **Decision:** require `cleaner_id` on `GET /api/jobs`. The only web caller is `CleanerJobs.tsx`, which always sends it (`listJobs(status, cleanerId)` in `web/src/api.ts`).
 
@@ -77,6 +79,6 @@ Tests: no token returns only the default cleaner; a valid token adds that cleane
 ## Pick up here
 
 1. Confirm PR #8 is merged and update `main`.
-2. Create the branch and implement **item 1** first, with tests. Run `.venv/bin/python -m pytest` (needs `docker compose up -d --wait` for the test Postgres on port 5433) and `cd web && npx vitest run`.
+2. ~~Create the branch and implement **item 1** first, with tests.~~ Done. Run `.venv/bin/python -m pytest` (needs `docker compose up -d --wait` for the test Postgres on port 5433) and `cd web && npx vitest run`.
 3. Ask the owner the two open questions before items 2 and 3: option A, B or C for same-email sign-in, and whether customers should see other visitors' cleaners in the booking picker.
 4. Update the README "Cleaners" paragraph and add a one-line known-limitations note for anything left open.

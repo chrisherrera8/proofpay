@@ -122,8 +122,8 @@ export const authorize = (jobId: string, orderId: string) =>
 
 export const getJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}`);
 
-export const listJobs = (status: string, cleanerId?: string) =>
-  request<Job[]>(`/api/jobs?status=${encodeURIComponent(status)}${cleanerId ? `&cleaner_id=${encodeURIComponent(cleanerId)}` : ""}`);
+export const listJobs = (status: string, cleanerId: string) =>
+  request<Job[]>(`/api/jobs?status=${encodeURIComponent(status)}&cleaner_id=${encodeURIComponent(cleanerId)}`);
 
 export const signUp = (body: { name: string; paypal_email: string }) =>
   request<Cleaner>("/api/cleaners", { method: "POST", body: JSON.stringify(body) });

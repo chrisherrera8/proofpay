@@ -74,19 +74,20 @@ def create_job(body: JobCreate, db: Session = Depends(get_db)) -> Job:
 
 @router.get("", response_model=list[JobOut])
 def list_jobs(
+    cleaner_id: uuid.UUID,
     status: JobStatus | None = None,
-    cleaner_id: uuid.UUID | None = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[Job]:
-    stmt = select(Job).options(*JOB_LOAD_OPTIONS).order_by(Job.created_at.desc(), Job.id).limit(limit).offset(offset)
+    stmt = (
+        select(Job).options(*JOB_LOAD_OPTIONS).where(Job.cleaner_id == cleaner_id)
+        .order_by(Job.created_at.desc(), Job.id).limit(limit).offset(offset)
+    )
     if status:
         stmt = stmt.where(Job.status == status.value)
-    if cleaner_id:
-        stmt = stmt.where(Job.cleaner_id == cleaner_id)
-        touch_cleaner(db, cleaner_id)  # the cleaner is looking at their jobs
-        db.commit()
+    touch_cleaner(db, cleaner_id)  # the cleaner is looking at their jobs
+    db.commit()
     return list(db.scalars(stmt))
 
 

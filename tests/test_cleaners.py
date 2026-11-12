@@ -283,6 +283,13 @@ def test_jobs_list_filters_by_cleaner_and_exposes_service_date(client, db, make_
     assert rows[0]["cleaner_id"] == str(mine.id) and rows[0]["service_date"] == DAY.isoformat()
 
 
+def test_jobs_list_never_returns_another_cleaners_jobs(client, db, make_job, make_cleaner, no_default):
+    mine, other = make_cleaner("Mine"), make_cleaner("Other")
+    book(db, make_job, other)
+    make_job("AUTHORIZED")  # unassigned
+    assert client.get("/api/jobs", params={"cleaner_id": str(mine.id)}).json() == []
+
+
 def test_deleting_a_cleaner_keeps_the_job(db, make_job, make_cleaner):
     c = make_cleaner("Gone")
     job = book(db, make_job, c)

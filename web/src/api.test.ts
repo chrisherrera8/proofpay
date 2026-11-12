@@ -84,11 +84,11 @@ describe("success and requests", () => {
     expect(find("DELETE", "/api/jobs/j1/photos/5")).toHaveLength(1);
   });
 
-  it("listJobs omits cleaner_id when none is given", async () => {
-    await listJobs("AUTHORIZED");
+  it("listJobs always sends the cleaner id", async () => {
+    await listJobs("AUTHORIZED", "c1");
     const [req] = find("GET", "/api/jobs");
     expect(req.url.searchParams.get("status")).toBe("AUTHORIZED");
-    expect(req.url.searchParams.has("cleaner_id")).toBe(false);
+    expect(req.url.searchParams.get("cleaner_id")).toBe("c1");
   });
 
   it("listJobs encodes status and cleaner id", async () => {

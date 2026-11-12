@@ -121,13 +121,30 @@ def test_get_malformed_id_422(client):
     assert client.get("/api/jobs/not-a-uuid").status_code == 422
 
 
-def test_list_jobs_and_status_filter(client, make_job, body):
-    client.post("/api/jobs", json=body)
-    make_job("AUTHORIZED")
-    assert len(client.get("/api/jobs").json()) == 2
-    booked = client.get("/api/jobs", params={"status": "BOOKED"}).json()
+def test_list_jobs_and_status_filter(client, db, make_job, body):
+    from sqlalchemy import update
+
+    from app.models import Cleaner, Job
+
+    c = Cleaner(name="Lister", paypal_email="lister@example.com")
+    db.add(c)
+    db.commit()
+    cid = str(c.id)
+    booked_id = client.post("/api/jobs", json=body).json()["id"]
+    other = make_job("AUTHORIZED")
+    db.execute(update(Job).where(Job.id.in_([booked_id, other.id])).values(cleaner_id=c.id))
+    db.commit()
+    assert len(client.get("/api/jobs", params={"cleaner_id": cid}).json()) == 2
+    booked = client.get("/api/jobs", params={"cleaner_id": cid, "status": "BOOKED"}).json()
     assert [j["status"] for j in booked] == ["BOOKED"]
-    assert client.get("/api/jobs", params={"status": "BOGUS"}).status_code == 422
+    assert client.get("/api/jobs", params={"cleaner_id": cid, "status": "BOGUS"}).status_code == 422
+
+
+def test_list_jobs_requires_cleaner_id(client, make_job):
+    make_job("AUTHORIZED")
+    assert client.get("/api/jobs").status_code == 422
+    assert client.get("/api/jobs", params={"status": "AUTHORIZED", "limit": 200}).status_code == 422
+    assert client.get("/api/jobs", params={"cleaner_id": "not-a-uuid"}).status_code == 422
 
 
 # web/src/tiers.ts shows these prices to customers, so they must match what the API accepts.
