@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate, Outlet, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, Outlet, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { CalendarDays, ChevronRight, Inbox } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,9 @@ import { ApiError, Cleaner, getCleaner, Job, listJobs } from "../api";
 import { tierById } from "../tiers";
 
 const JOB_LIMIT = 200;
+
+// Below lg the list and the open job are alternate screens, so auto-opening a job would hide the list.
+const isSplitView = () => window.matchMedia("(min-width: 1024px)").matches;
 
 function JobRow({ job: j, active }: { job: Job; active: boolean }) {
   const location = useLocation();
@@ -51,7 +54,9 @@ export default function CleanerJobs() {
   const [expired, setExpired] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const { jobId } = useParams();
+  const location = useLocation();
   const open = !!jobId;
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!cleanerId) return;
@@ -78,8 +83,23 @@ export default function CleanerJobs() {
   const filter = requested && counts.some((c) => c.status === requested) ? requested : null;
   const groups = useMemo(() => groupJobs(jobs ?? [], filter), [jobs, filter]);
 
-  const setFilter = (status: string | null) =>
-    setSearchParams(status ? { status } : {}, { replace: true });
+  // Side by side, the detail pane should always show a job: open the first one on load and on every filter change.
+  const firstId = groups[0]?.jobs[0]?.id;
+  useEffect(() => {
+    if (!jobId && firstId && isSplitView()) {
+      navigate({ pathname: `/cleaner/${firstId}`, search: location.search }, { replace: true });
+    }
+  }, [jobId, firstId, navigate, location.search]);
+
+  const setFilter = (status: string | null) => {
+    const search = status ? `?${new URLSearchParams({ status })}` : "";
+    const first = groupJobs(jobs ?? [], status)[0]?.jobs[0];
+    if (first && isSplitView()) {
+      navigate({ pathname: `/cleaner/${first.id}`, search }, { replace: true });
+    } else {
+      setSearchParams(status ? { status } : {}, { replace: true });
+    }
+  };
 
   if (!cleanerId) return <Navigate to="/cleaner/signup" replace state={expired ? { expired: true } : undefined} />;
 
