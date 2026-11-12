@@ -86,12 +86,18 @@ def get_active_cleaner(db: Session, cleaner_id: uuid.UUID) -> Cleaner | None:
     return db.scalar(select(Cleaner).where(Cleaner.id == cleaner_id, active_cleaner_filter()))
 
 
-def booked_on(date: dt.date):
-    """SQL condition: this cleaner has a job that day that still counts (anything past BOOKED, or a recent BOOKED).
+def _still_holds_the_day():
+    """SQL condition on Job: the job still keeps its cleaner busy for its day.
 
-    REJECTED counts on purpose: a rejected job can be re-cleaned, so the cleaner still owns the day."""
-    holds = and_(Job.cleaner_id == Cleaner.id, Job.service_date == date,
-                 or_(Job.status != JobStatus.BOOKED.value, Job.created_at > func.now() - UNPAID_HOLD))
+    Anything past BOOKED counts, and a BOOKED job counts for UNPAID_HOLD. PAID_OUT does not: the work is done and
+    paid, so the cleaner can be booked again that day. REJECTED counts on purpose: it can be re-cleaned."""
+    return and_(Job.status != JobStatus.PAID_OUT.value,
+                or_(Job.status != JobStatus.BOOKED.value, Job.created_at > func.now() - UNPAID_HOLD))
+
+
+def booked_on(date: dt.date):
+    """SQL condition: this cleaner has a job that day that still holds the day (see _still_holds_the_day)."""
+    holds = and_(Job.cleaner_id == Cleaner.id, Job.service_date == date, _still_holds_the_day())
     return exists().where(holds)
 
 
@@ -100,7 +106,7 @@ def day_is_claimed_by_another(db: Session, job: Job) -> bool:
     if job.cleaner_id is None or job.service_date is None:
         return False
     holds = and_(Job.cleaner_id == job.cleaner_id, Job.service_date == job.service_date, Job.id != job.id,
-                 or_(Job.status != JobStatus.BOOKED.value, Job.created_at > func.now() - UNPAID_HOLD))
+                 _still_holds_the_day())
     return bool(db.scalar(select(exists().where(holds))))
 
 
