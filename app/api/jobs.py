@@ -1,15 +1,15 @@
 import uuid
 from datetime import datetime, time, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.audit import append_audit
 from app.checklists import CHECKLIST_TEMPLATES
 from app.cleaners import active_cleaner_filter, booked_on, touch_cleaner
 from app.db import get_db
-from app.models import ChecklistItem, Cleaner, Job, JobStatus
+from app.models import Approval, ChecklistItem, Cleaner, Job, JobStatus, Payment, Payout, Photo, Verification
 from app.schemas import JobCreate, JobOut
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -99,3 +99,28 @@ def get_job(job_id: uuid.UUID, db: Session = Depends(get_db)) -> Job:
     if job is None:
         raise HTTPException(404, "Job not found")
     return job
+
+
+# Deleting is only allowed where no customer money is held or in flight: BOOKED (never paid) and PAID_OUT
+# (finished and settled). Anywhere between, a PayPal hold or capture would be orphaned.
+DELETABLE = {JobStatus.BOOKED.value, JobStatus.PAID_OUT.value}
+
+
+@router.delete("/{job_id}", status_code=204)
+def delete_job(job_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+    """Delete a job and its photos, checks, payment, payout, approvals and checklist. The audit log keeps its
+    rows (ids only, no foreign key) and gets a JOB_DELETED row."""
+    job = db.scalar(select(Job).where(Job.id == job_id).with_for_update())
+    if job is None:
+        raise HTTPException(404, "Job not found")
+    if job.status not in DELETABLE:
+        db.rollback()  # release the lock
+        raise HTTPException(409, f"Job is {job.status}; only unpaid (BOOKED) or finished (PAID_OUT) jobs can be deleted")
+    status = job.status
+    for child in (Photo, Verification, Payout, Approval, Payment, ChecklistItem):
+        db.execute(delete(child).where(child.job_id == job_id))
+    db.expire_all()  # the bulk deletes bypass the ORM's view of the job's relationships
+    db.execute(delete(Job).where(Job.id == job_id))
+    append_audit(db, job_id=job_id, actor="cleaner", event="JOB_DELETED", from_status=status)
+    db.commit()
+    return Response(status_code=204)
