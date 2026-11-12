@@ -44,6 +44,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 // Standard page shell for the narrow (form and job) pages.
-export function Page({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto w-full max-w-xl px-4 py-8 sm:px-6 sm:py-12">{children}</div>;
+// `flush` drops the padding on wide screens, for pages that sit inside a pane of a larger layout.
+export function Page({ children, flush }: { children: React.ReactNode; flush?: boolean }) {
+  return <div className={`mx-auto w-full max-w-xl px-4 py-8 sm:px-6 sm:py-12${flush ? " lg:p-0" : ""}`}>{children}</div>;
 }

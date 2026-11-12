@@ -211,15 +211,15 @@ export default function CleanerJob() {
     }
   }
 
-  if (!job) return error ? <Page><ErrorAlert message={error} /></Page> : <PageSkeleton label="Loading job" />;
+  if (!job) return error ? <Page flush><ErrorAlert message={error} /></Page> : <PageSkeleton label="Loading job" />;
 
   const editable = job.status === "AUTHORIZED" || job.status === "REJECTED";
   const ready = photos.some((p) => p.kind === "before") && photos.some((p) => p.kind === "after");
   const v = job.verification;
 
   return (
-    <Page>
-      <Link to="/cleaner" className="inline-flex items-center gap-1 rounded text-sm text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
+    <Page flush>
+      <Link to="/cleaner" className="inline-flex lg:hidden items-center gap-1 rounded text-sm text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
         <ChevronLeft className="size-4" aria-hidden /> All jobs
       </Link>
       <div className="mt-3 flex flex-col gap-3">

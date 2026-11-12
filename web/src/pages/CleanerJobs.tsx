@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, Outlet, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { CalendarDays, ChevronRight, Inbox } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Page } from "@/components/layout";
+import { cn } from "@/lib/utils";
 import { ErrorAlert } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { StatusFilter } from "@/components/status-filter";
@@ -14,12 +14,17 @@ import { tierById } from "../tiers";
 
 const JOB_LIMIT = 200;
 
-function JobRow({ job: j }: { job: Job }) {
+function JobRow({ job: j, active }: { job: Job; active: boolean }) {
+  const location = useLocation();
   return (
     <li>
       <Link
-        to={`/cleaner/${j.id}`}
-        className="group flex items-center gap-4 rounded-xl border bg-card p-4 shadow-xs transition-colors outline-none hover:border-primary/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:p-5"
+        to={{ pathname: `/cleaner/${j.id}`, search: location.search }}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "group flex items-center gap-4 rounded-xl border bg-card p-4 shadow-xs transition-colors outline-none hover:border-primary/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:p-5",
+          active && "border-primary bg-primary/5",
+        )}
       >
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -45,6 +50,8 @@ export default function CleanerJobs() {
   const [error, setError] = useState<string | null>(null);
   const [expired, setExpired] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+  const { jobId } = useParams();
+  const open = !!jobId;
 
   useEffect(() => {
     if (!cleanerId) return;
@@ -77,7 +84,10 @@ export default function CleanerJobs() {
   if (!cleanerId) return <Navigate to="/cleaner/signup" replace state={expired ? { expired: true } : undefined} />;
 
   return (
-    <Page>
+    // The list stays mounted while jobs open beside it, so it keeps its scroll, filter and data.
+    // Both panes sit in a centred row: the detail pane growing from 0 pushes the list left.
+    <div className="mx-auto flex w-full max-w-6xl justify-center px-4 py-8 sm:px-6 sm:py-12">
+      <div className={cn("w-full max-w-xl shrink-0 lg:w-[26rem] lg:max-w-none", open && "hidden lg:block")}>
       <h1 className="text-3xl font-semibold">{cleaner ? `${cleaner.name}'s jobs` : "Your jobs"}</h1>
       <p className="mt-2 text-muted-foreground">All your jobs. Anything that needs your attention is listed first.</p>
 
@@ -104,7 +114,7 @@ export default function CleanerJobs() {
                   {section.title} <span className="font-normal text-muted-foreground tabular-nums">{rows.length}</span>
                 </h2>
                 <ul className="mt-3 grid gap-3">
-                  {rows.map((j) => <JobRow key={j.id} job={j} />)}
+                  {rows.map((j) => <JobRow key={j.id} job={j} active={j.id === jobId} />)}
                 </ul>
               </section>
             ))}
@@ -124,6 +134,16 @@ export default function CleanerJobs() {
           Switch cleaner
         </Link>
       </p>
-    </Page>
+      </div>
+      <div
+        className={cn(
+          "min-w-0 overflow-hidden transition-[width,margin,opacity] duration-300 ease-out motion-reduce:transition-none",
+          open ? "w-full opacity-100 lg:ml-8 lg:w-[34rem]" : "w-0 opacity-0",
+        )}
+      >
+        {/* Keyed so switching jobs never flashes the previous job's data. */}
+        <Outlet key={jobId} />
+      </div>
+    </div>
   );
 }

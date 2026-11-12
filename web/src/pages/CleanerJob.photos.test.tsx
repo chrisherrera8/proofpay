@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { photoUrl, type Job, type Photo } from "@/api";
@@ -8,11 +8,15 @@ import { makeJob } from "@/test/fixtures";
 import { API } from "@/test/handlers";
 import { makePhoto, serveJob } from "@/test/job";
 import { find } from "@/test/requests";
+import { setCleanerId } from "@/lib/cleaner-session";
 import { renderRoute } from "@/test/render";
 import { server } from "@/test/server";
 
 // Resizing needs createImageBitmap and a canvas, which jsdom lacks (Playwright covers it).
 vi.mock("../resize", () => ({ resizeImage: async () => new Blob(["x"], { type: "image/jpeg" }) }));
+
+// The job page lives inside the cleaner list layout, which needs a signed-in cleaner.
+beforeEach(() => setCleanerId("c1"));
 
 const file = (name: string) => new File(["x"], name, { type: "image/jpeg" });
 const files = (n: number) => Array.from({ length: n }, (_, i) => file(`p${i}.jpg`));
