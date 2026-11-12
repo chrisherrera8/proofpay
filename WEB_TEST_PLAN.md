@@ -276,16 +276,16 @@ This is light coverage of pages with little logic.
 
 **Booked**
 
-- [ ] While loading, the "Loading your booking" skeleton shows. A `getJob` 404 shows the error alert.
-- [ ] The happy path shows "Thanks, Sam.", the tier name as the card title, the formatted amount and the checklist labels.
-- [ ] A null `cleaner_name` shows "Your cleaner (their demo data has been deleted)".
-- [ ] A null `service_date` falls back to `scheduled_at`. An unknown `service_type` shows its raw value.
+- [x] While loading, the "Loading your booking" skeleton shows. A `getJob` 404 shows the error alert.
+- [x] The happy path shows "Thanks, Sam.", the tier name as the card title, the formatted amount and the checklist labels.
+- [x] A null `cleaner_name` shows "Your cleaner (their demo data has been deleted)".
+- [x] A null `service_date` falls back to `scheduled_at`. An unknown `service_type` shows its raw value.
 
 **Routing smoke test**
 
-- [ ] Move the `<Routes>` tree from `main.tsx` into an exported `AppRoutes` so tests and `main.tsx` share it, and use it in `renderRoute`.
-- [ ] `/`, `/book`, `/cleaner/signup` and `/nope` each render without errors. `/nope` shows Home.
-- [ ] `/cleaner/signup` matches the signup page, not `/cleaner/:jobId`.
+- [x] Move the `<Routes>` tree from `main.tsx` into an exported `AppRoutes` so tests and `main.tsx` share it, and use it in `renderRoute`.
+- [x] `/`, `/book`, `/cleaner/signup` and `/nope` each render without errors. `/nope` shows Home.
+- [x] `/cleaner/signup` matches the signup page, not `/cleaner/:jobId`.
 
 ## Phase 8: Fixes and follow-ups
 
