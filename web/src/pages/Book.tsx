@@ -4,6 +4,7 @@ import { AlertCircle, ChevronLeft, CircleCheck, ShieldCheck } from "lucide-react
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Field } from "@/components/field";
 import { cn } from "@/lib/utils";
+import { getCleanerId } from "@/lib/cleaner-session";
 import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
 import { formatDay, todayLocal } from "@/lib/format";
 import { ApiError, authorize, CleanerAvailability, createJob, createOrder, listCleaners } from "../api";
@@ -49,10 +50,13 @@ export default function Book() {
   // The job created for the current details. A new one is made if the details or tier change.
   const jobRef = useRef<{ id: string; key: string } | null>(null);
 
+  // Customers only see the default cleaner and the cleaner this browser is signed in as.
+  const visible = (c: CleanerAvailability) => c.is_seed || c.id === getCleanerId();
+
   const loadCleaners = (date: string) => {
     setCleaners(null);
     setCleanersError(null);
-    listCleaners(date).then(setCleaners).catch((e) => setCleanersError(e.message));
+    listCleaners(date).then((c) => setCleaners(c.filter(visible))).catch((e) => setCleanersError(e.message));
   };
 
   // Availability depends on the date, so reload when it changes. A picked cleaner who is no longer free is dropped.
@@ -67,6 +71,7 @@ export default function Book() {
     listCleaners(form.when)
       .then((c) => {
         if (stale) return;
+        c = c.filter(visible);
         setCleaners(c);
         setForm((f) => (c.some((x) => x.id === f.cleaner && x.available) ? f : { ...f, cleaner: "" }));
       })
@@ -211,6 +216,14 @@ export default function Book() {
                         </button>
                       );
                     })}
+                    {!cleaners.some((c) => !c.is_seed) && (
+                      <div className="rounded-lg border border-warning-foreground/30 bg-warning px-4 py-3 text-sm text-warning-foreground">
+                        <Link to="/cleaner/signup" className="font-semibold underline underline-offset-2 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+                          Register your cleaner
+                        </Link>
+                        <span className="mt-0.5 block">Sign up as a cleaner to be bookable here.</span>
+                      </div>
+                    )}
                     {cleaners.every((c) => !c.available) && (
                       <p className="text-sm text-muted-foreground">Everyone is booked that day. Try another date.</p>
                     )}

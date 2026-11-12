@@ -1,3 +1,4 @@
+import { setCleanerId } from "@/lib/cleaner-session";
 import { http, HttpResponse } from "msw";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -24,10 +25,11 @@ import {
 
 vi.mock("@paypal/react-paypal-js", async () => (await import("@/test/paypal-stub")).paypalModule);
 
-const ana = makeAvailability({ id: "c1", name: "Ana" });
+const ana = makeAvailability({ id: "c1", name: "Ana", is_seed: true });
 const bo = makeAvailability({ id: "c2", name: "Bo" });
 
 beforeEach(() => {
+  setCleanerId("c2"); // Bo is the signed-in cleaner
   freezeToday();
   server.use(cleanersHandler([ana, bo]));
 });
@@ -192,7 +194,7 @@ describe("Book: cleaner picker", () => {
   it("drops the selection when the picked cleaner is booked on the new date, and keeps it when free", async () => {
     server.use(
       cleanersHandler([ana, bo], {
-        "2026-11-21": [makeAvailability({ id: "c1", name: "Ana", available: false }), bo],
+        "2026-11-21": [makeAvailability({ id: "c1", name: "Ana", is_seed: true, available: false }), bo],
         "2026-11-22": [ana, bo],
       }),
     );
@@ -232,7 +234,7 @@ describe("Book: cleaner picker", () => {
           await first.promise;
           return HttpResponse.json([makeAvailability({ id: "old", name: "Old" })]);
         }
-        return HttpResponse.json([makeAvailability({ id: "new", name: "New" })]);
+        return HttpResponse.json([makeAvailability({ id: "new", name: "New", is_seed: true })]);
       }),
     );
     renderRoute("/book");
@@ -257,3 +259,21 @@ describe("Book: cleaner picker", () => {
 });
 
 const cleanerRadioFind = (name: RegExp) => screen.findByRole("radio", { name });
+
+describe("Book: who is listed", () => {
+  it("hides other cleaners and offers registration when not signed in as one", async () => {
+    localStorage.clear();
+    renderRoute("/book");
+    setDate("2026-11-20");
+    expect(await cleanerRadioFind(/^Ana/)).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /^Bo/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Register your cleaner" })).toHaveAttribute("href", "/cleaner/signup");
+  });
+
+  it("lists the signed-in cleaner and drops the registration prompt", async () => {
+    renderRoute("/book");
+    setDate("2026-11-20");
+    expect(await cleanerRadioFind(/^Bo/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Register your cleaner" })).not.toBeInTheDocument();
+  });
+});

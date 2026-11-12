@@ -1,3 +1,4 @@
+import { setCleanerId } from "@/lib/cleaner-session";
 import { http, HttpResponse } from "msw";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -26,11 +27,12 @@ import {
 
 vi.mock("@paypal/react-paypal-js", async () => (await import("@/test/paypal-stub")).paypalModule);
 
-const ana = makeAvailability({ id: "c1", name: "Ana" });
+const ana = makeAvailability({ id: "c1", name: "Ana", is_seed: true });
 const bo = makeAvailability({ id: "c2", name: "Bo" });
 const FIX_FIELDS = "Please fix the highlighted fields before paying.";
 
 beforeEach(() => {
+  setCleanerId("c2"); // Bo is the signed-in cleaner
   freezeToday();
   server.use(cleanersHandler([ana, bo]));
 });

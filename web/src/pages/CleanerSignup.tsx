@@ -103,10 +103,10 @@ export default function CleanerSignup() {
           error={shown("email")}
           disabled={busy}
         />
-        <p className="text-sm text-muted-foreground">
-          Your account stays available for 24 hours after you last use it. After that your name, PayPal email, jobs
-          and payouts are deleted from this demo. Signing up again with the same PayPal email takes you back to
-          your account, and asks you to confirm it's yours if you're on a new browser.
+        <p role="note" className="rounded-lg bg-warning p-3 text-sm text-warning-foreground">
+          <strong>Accounts are deleted after 24 hours of no use.</strong> Your name, PayPal email, jobs and payouts
+          are then removed from this demo. Signing up again with the same PayPal email takes you back to your
+          account, and asks you to confirm it's yours if you're on a new browser.
         </p>
         {error && <ErrorAlert message={error} />}
         {existing && (
