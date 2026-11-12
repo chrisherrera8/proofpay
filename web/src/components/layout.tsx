@@ -17,7 +17,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 border-b bg-background/90 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
+        <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6">
           <Logo />
           <nav aria-label="Main" className="flex items-center gap-1">
             <Button asChild variant="ghost" className="hidden sm:inline-flex">
