@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { BadgeCheck, CalendarCheck, Clock, CreditCard, Lock, RotateCcw, ShieldCheck, Unlock, Upload } from "lucide-react";
+import { BadgeCheck, CalendarCheck, Clock, CircleX, CreditCard, Lock, RotateCcw, ShieldCheck, Unlock, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Tone = "neutral" | "info" | "success" | "warning" | "danger";
@@ -14,6 +14,7 @@ export const STATUS: Record<string, { label: string; tone: Tone; icon: LucideIco
   REJECTED: { label: "Re-clean needed", tone: "danger", icon: RotateCcw },
   RELEASED: { label: "Released for payment", tone: "success", icon: Unlock },
   CAPTURED: { label: "Payment captured", tone: "success", icon: CreditCard },
+  PAYOUT_FAILED: { label: "Payout failed", tone: "danger", icon: CircleX },
   PAID_OUT: { label: "Paid out", tone: "success", icon: BadgeCheck },
 };
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Job } from "../api";
-import { groupJobs, statusCounts } from "./job-sections";
+import { displayStatus, groupJobs, statusCounts } from "./job-sections";
 
 let n = 0;
 const job = (status: string, service_date: string | null = "2026-11-10"): Job =>
@@ -59,5 +59,23 @@ describe("statusCounts", () => {
 
   it("returns nothing for no jobs", () => {
     expect(statusCounts([])).toEqual([]);
+  });
+});
+
+describe("payout failed", () => {
+  const failed = () => ({ ...job("CAPTURED"), payout: { amount: "10.00", status: "FAILED" } }) as Job;
+  const pending = () => ({ ...job("CAPTURED"), payout: { amount: "10.00", status: "PENDING" } }) as Job;
+
+  it("is its own status only for a CAPTURED job with a FAILED payout", () => {
+    expect(displayStatus(failed())).toBe("PAYOUT_FAILED");
+    expect(displayStatus(pending())).toBe("CAPTURED");
+    expect(displayStatus(job("PAID_OUT"))).toBe("PAID_OUT");
+  });
+
+  it("gets its own chip and sits under Needs your attention", () => {
+    const jobs = [pending(), failed()];
+    expect(statusCounts(jobs).map((c) => c.status)).toEqual(["PAYOUT_FAILED", "CAPTURED"]);
+    expect(groupJobs(jobs).map((g) => g.section.id)).toEqual(["attention", "payment"]);
+    expect(groupJobs(jobs, "PAYOUT_FAILED").flatMap((g) => g.jobs)).toHaveLength(1);
   });
 });

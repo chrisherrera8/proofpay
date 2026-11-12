@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { StatusFilter } from "@/components/status-filter";
 import { clearCleanerId, getCleanerId } from "@/lib/cleaner-session";
 import { formatDay } from "@/lib/format";
-import { groupJobs, statusCounts } from "@/lib/job-sections";
+import { displayStatus, groupJobs, statusCounts } from "@/lib/job-sections";
 import { ApiError, Cleaner, getCleaner, Job, listJobs } from "../api";
 import { tierById } from "../tiers";
 
@@ -34,7 +34,7 @@ function JobRow({ job: j, active }: { job: Job; active: boolean }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{tierById(j.service_type)?.name ?? j.service_type}</span>
-            <StatusBadge status={j.status} />
+            <StatusBadge status={displayStatus(j)} />
           </div>
           <p className="mt-1 truncate text-sm">{j.address}</p>
           <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">

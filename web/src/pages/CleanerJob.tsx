@@ -13,6 +13,7 @@ import { tierById } from "../tiers";
 import type { CleanerJobsContext } from "./CleanerJobs";
 import { deleteJob, deletePhoto, getJob, Job, listPhotos, Photo, photoUrl, settleJob, submitJob, uploadPhoto, verifyJob } from "../api";
 import { resizeImage } from "../resize";
+import { displayStatus } from "@/lib/job-sections";
 
 const MAX_PER_KIND = 4;
 
@@ -243,7 +244,7 @@ export default function CleanerJob() {
           <p className="text-sm font-medium text-muted-foreground">
             {tierById(job.service_type)?.name ?? job.service_type}
           </p>
-          <StatusBadge status={job.status} />
+          <StatusBadge status={displayStatus(job)} />
         </div>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">{job.address}</h1>
         {job.strict_check && (
