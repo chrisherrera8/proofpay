@@ -20,8 +20,10 @@ class GeminiProvider:
         self.timeout = timeout
         self.tries = tries
 
-    def verify(self, before: list[ImageInput], after: list[ImageInput], checklist: list[str]) -> VisionResult:
-        prompt = build_prompt(checklist, len(before), len(after))
+    def verify(
+        self, before: list[ImageInput], after: list[ImageInput], checklist: list[str], strict: bool = False
+    ) -> VisionResult:
+        prompt = build_prompt(checklist, len(before), len(after), strict)
         parts: list[dict] = [{"text": prompt}] + [
             {"inline_data": {"mime_type": im.mime_type, "data": base64.b64encode(im.data).decode()}}
             for im in [*before, *after]
@@ -38,7 +40,7 @@ class GeminiProvider:
         usage = d.get("usageMetadata", {})
         return score_answer(
             parse_model_json(text), checklist, self.model,
-            usage.get("promptTokenCount", 0), usage.get("candidatesTokenCount", 0),
+            usage.get("promptTokenCount", 0), usage.get("candidatesTokenCount", 0), strict=strict,
         )
 
     def _post(self, body: dict) -> dict:

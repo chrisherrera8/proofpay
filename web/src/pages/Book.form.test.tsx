@@ -56,6 +56,30 @@ describe("Book: service tier", () => {
   });
 });
 
+describe("Book: what's included and strict check", () => {
+  it("lists what the selected plan covers and updates when the plan changes", async () => {
+    const user = userEvent.setup();
+    renderRoute("/book");
+    const list = screen.getByRole("list", { name: /What's included in Basic Clean/ });
+    expect(within(list).getAllByRole("listitem").map((li) => li.textContent?.trim())).toEqual([
+      "Kitchen", "Bathroom", "Floors", "Surfaces",
+    ]);
+    await user.click(tierRadio(/Deep Clean/));
+    expect(screen.getByRole("list", { name: /What's included in Deep Clean/ })).toHaveTextContent("Oven");
+  });
+
+  it("offers an unchecked Strict check that the summary reflects", async () => {
+    const user = userEvent.setup();
+    renderRoute("/book");
+    const box = screen.getByRole("checkbox", { name: /Strict check/ });
+    expect(box).not.toBeChecked();
+    expect(screen.queryByText("Photo check")).not.toBeInTheDocument();
+    await user.click(box);
+    expect(box).toBeChecked();
+    expect(screen.getByText("Photo check")).toBeInTheDocument();
+  });
+});
+
 describe("Book: validation and error timing", () => {
   it.each([
     ["name", () => nameBox(), "Enter your name."],

@@ -29,7 +29,7 @@ class FakeVision:
         self.error = error
         self.calls = []
 
-    def verify(self, before, after, checklist):
+    def verify(self, before, after, checklist, strict=False):
         self.calls.append((len(before), len(after), list(checklist)))
         if self.error:
             raise self.error

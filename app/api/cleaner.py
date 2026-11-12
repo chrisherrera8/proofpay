@@ -127,7 +127,7 @@ def _run_verification(db: Session, job: Job, vision: VisionProvider, paypal: Pay
     after = [ImageInput(p.data, p.content_type) for p in photos if p.kind == "after"]
     checklist = [i.label for i in job.checklist_items]
     try:
-        result = vision.verify(before, after, checklist)
+        result = vision.verify(before, after, checklist, strict=job.strict_check)
     except VisionError as exc:
         append_audit(db, job_id=job.id, actor="system", event="VERIFICATION_ERROR",
                      payload={"error": str(exc)})
@@ -148,7 +148,8 @@ def _run_verification(db: Session, job: Job, vision: VisionProvider, paypal: Pay
     transition(
         db, job, JobStatus.VERIFIED, actor="vision", event="VERIFICATION_COMPLETED",
         payload={"model": result.model, "score": result.score, "overall_pass": result.overall_pass,
-                 "failed_items": [i.item for i in result.items if i.visible and not i.passed]},
+                 "strict_check": job.strict_check,
+                 "failed_items": [i.item for i in result.items if not i.passed]},
     )
     db.commit()
     try:

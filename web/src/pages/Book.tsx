@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { AlertCircle, ChevronLeft, CircleCheck, ShieldCheck } from "lucide-react";
+import { AlertCircle, Check, ChevronLeft, CircleCheck, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Field } from "@/components/field";
 import { cn } from "@/lib/utils";
@@ -37,6 +37,7 @@ export default function Book() {
   const [form, setForm] = useState<Form>({ name: "", email: "", address: "", when: "", cleaner: "" });
   const [touched, setTouched] = useState<Partial<Record<keyof Form, boolean>>>({});
   const [showAll, setShowAll] = useState(false);
+  const [strict, setStrict] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Cleaners for the chosen date: null while loading or before a date is picked.
@@ -47,6 +48,8 @@ export default function Book() {
   formRef.current = form;
   const tierRef = useRef(tier);
   tierRef.current = tier;
+  const strictRef = useRef(strict);
+  strictRef.current = strict;
   // The job created for the current details. A new one is made if the details or tier change.
   const jobRef = useRef<{ id: string; key: string } | null>(null);
 
@@ -92,9 +95,10 @@ export default function Book() {
   async function makeOrder(): Promise<string> {
     const f = formRef.current;
     const t = tierRef.current;
+    const strictCheck = strictRef.current;
     // Re-validate: the form can change between the click check and this call.
     if (Object.keys(validate(f)).length) throw new Error("Please fix the highlighted fields.");
-    const key = JSON.stringify([t.id, f.name.trim(), f.email.trim(), f.address.trim(), f.when, f.cleaner]);
+    const key = JSON.stringify([t.id, f.name.trim(), f.email.trim(), f.address.trim(), f.when, f.cleaner, strictCheck]);
     // Reuse the job on a retry with identical details; the order endpoint is idempotent per job.
     if (!jobRef.current || jobRef.current.key !== key) {
       let job;
@@ -107,6 +111,7 @@ export default function Book() {
           cleaner_id: f.cleaner,
           service_date: f.when,
           amount: t.price,
+          strict_check: strictCheck,
         });
       } catch (e) {
         // 409: someone took this cleaner's day first. Refresh the list and send the customer back to the picker.
@@ -173,6 +178,33 @@ export default function Book() {
                 );
               })}
             </div>
+
+            <div className="mt-5 rounded-lg bg-muted p-4">
+              <h3 id="included" className="text-sm font-medium">What's included in {tier.name}</h3>
+              <ul aria-labelledby="included" className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                {tier.features.map((f) => (
+                  <li key={f} className="flex items-center gap-2">
+                    <Check className="size-4 shrink-0 text-primary" aria-hidden /> {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border bg-card p-4 has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50">
+              <input
+                type="checkbox"
+                checked={strict}
+                disabled={busy}
+                onChange={(e) => setStrict(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-primary"
+              />
+              <span className="text-sm">
+                <span className="font-medium">Strict check</span>
+                <span className="mt-0.5 block text-muted-foreground">
+                  Every item must be clearly visible in the after photos. An item that can't be seen counts as failed.
+                </span>
+              </span>
+            </label>
           </section>
 
           <section aria-labelledby="when-heading" className="rounded-xl border bg-card p-5 shadow-xs sm:p-6">
@@ -255,6 +287,12 @@ export default function Book() {
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Day</dt>
                 <dd>{formatDay(form.when)}{cleaners?.find((c) => c.id === form.cleaner) && ` · ${cleaners.find((c) => c.id === form.cleaner)!.name}`}</dd>
+              </div>
+            )}
+            {strict && (
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Photo check</dt>
+                <dd>Strict</dd>
               </div>
             )}
             <div className="flex justify-between gap-4 border-t pt-3 text-base font-semibold">
