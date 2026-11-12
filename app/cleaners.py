@@ -1,0 +1,136 @@
+"""Cleaner rules: who is still around, who is free on a date, and the permanent default cleaner."""
+import datetime as dt
+import logging
+import threading
+import time
+import uuid
+
+from sqlalchemy import and_, delete, exists, func, or_, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.audit import append_audit
+from app.config import DEFAULT_CLEANER_NAME, get_settings
+from app.models import Cleaner, Job, JobStatus, Photo
+
+log = logging.getLogger(__name__)
+
+CLEANER_TTL = dt.timedelta(hours=24)
+# The roster endpoint purges as a side effect (Render's free tier has no cron), at most this often per process.
+PURGE_EVERY_SECONDS = 60
+# A job that never got authorized stops holding its cleaner for the day after this long.
+UNPAID_HOLD = dt.timedelta(minutes=30)
+
+
+def active_cleaner_filter():
+    """SQL condition: the default cleaner, or a sign-up younger than 24 hours. Expired rows are hidden at once,
+    even before anything has deleted them."""
+    return or_(Cleaner.is_seed, Cleaner.created_at > func.now() - CLEANER_TTL)
+
+
+def get_active_cleaner(db: Session, cleaner_id: uuid.UUID) -> Cleaner | None:
+    return db.scalar(select(Cleaner).where(Cleaner.id == cleaner_id, active_cleaner_filter()))
+
+
+def booked_on(date: dt.date):
+    """SQL condition: this cleaner has a job that day that still counts (anything past BOOKED, or a recent BOOKED).
+
+    REJECTED counts on purpose: a rejected job can be re-cleaned, so the cleaner still owns the day."""
+    holds = and_(Job.cleaner_id == Cleaner.id, Job.service_date == date,
+                 or_(Job.status != JobStatus.BOOKED.value, Job.created_at > func.now() - UNPAID_HOLD))
+    return exists().where(holds)
+
+
+def day_is_claimed_by_another(db: Session, job: Job) -> bool:
+    """True if a different job already holds this job's cleaner for its day (jobs with no cleaner never conflict)."""
+    if job.cleaner_id is None or job.service_date is None:
+        return False
+    holds = and_(Job.cleaner_id == job.cleaner_id, Job.service_date == job.service_date, Job.id != job.id,
+                 or_(Job.status != JobStatus.BOOKED.value, Job.created_at > func.now() - UNPAID_HOLD))
+    return bool(db.scalar(select(exists().where(holds))))
+
+
+def list_cleaners(db: Session, date: dt.date) -> list[tuple[Cleaner, bool]]:
+    """Active cleaners with whether each is free on `date`; the default cleaner first, then newest sign-ups."""
+    taken = booked_on(date)
+    rows = db.execute(
+        select(Cleaner, ~taken).where(active_cleaner_filter()).order_by(Cleaner.is_seed.desc(), Cleaner.created_at.desc())
+    )
+    return [(c, bool(free)) for c, free in rows]
+
+
+def resolve_payee(job: Job) -> tuple[str, str] | None:
+    """(PayPal email, "cleaner" | "default") for the job's payout, or None if there is nowhere to send it.
+
+    The booked cleaner is paid. If the job has none (an old job, or the cleaner's data was deleted after 24 hours),
+    the default PAYPAL_CLEANER_EMAIL is paid instead.
+    """
+    if job.cleaner is not None:
+        return job.cleaner.paypal_email, "cleaner"
+    fallback = get_settings().paypal_cleaner_email.strip()
+    return (fallback, "default") if fallback else None
+
+
+def ensure_default_cleaner(db: Session) -> Cleaner | None:
+    """Create or update the one permanent cleaner from PAYPAL_CLEANER_EMAIL and DEFAULT_CLEANER_NAME.
+
+    With no PAYPAL_CLEANER_EMAIL there is no default cleaner (and none is created). Idempotent.
+    """
+    settings = get_settings()
+    email = settings.paypal_cleaner_email.strip()
+    if not email:
+        return None
+    name = settings.default_cleaner_name.strip() or DEFAULT_CLEANER_NAME
+    cleaner = db.scalar(select(Cleaner).where(Cleaner.is_seed))
+    if cleaner is None:
+        try:
+            with db.begin_nested():
+                cleaner = Cleaner(name=name, paypal_email=email, is_seed=True)
+                db.add(cleaner)
+        except IntegrityError:  # another worker created it first (uq_cleaners_one_seed)
+            cleaner = db.scalar(select(Cleaner).where(Cleaner.is_seed))
+        db.commit()
+    elif (cleaner.name, cleaner.paypal_email) != (name, email):
+        cleaner.name, cleaner.paypal_email = name, email
+        db.commit()
+    return cleaner
+
+
+def purge_expired(db: Session) -> dict[str, int]:
+    """Scrub expired cleaners: delete their rows and the photos of their jobs, and set jobs.cleaner_id to NULL.
+
+    Jobs and audit rows stay, so the hash chain is never touched. Audit rows hold cleaner ids but no names or
+    emails. The default cleaner never expires. Idempotent; writes one count-only audit row only when it deleted
+    something. Commits.
+    """
+    expired = select(Cleaner.id).where(~Cleaner.is_seed, ~active_cleaner_filter())
+    photos = db.execute(
+        delete(Photo).where(Photo.job_id.in_(select(Job.id).where(Job.cleaner_id.in_(expired))))
+    ).rowcount
+    # RETURNING, so a concurrent purge that got there first is not counted twice. The FK sets jobs.cleaner_id NULL.
+    cleaners = len(db.execute(delete(Cleaner).where(Cleaner.id.in_(expired)).returning(Cleaner.id)).all())
+    if cleaners:
+        append_audit(db, job_id=None, actor="system", event="CLEANERS_PURGED",
+                     payload={"cleaners": cleaners, "photos": photos})
+    db.commit()
+    return {"cleaners": cleaners, "photos": photos}
+
+
+_last_purge = 0.0
+_purge_lock = threading.Lock()
+
+
+def purge_if_due(db: Session) -> None:
+    """purge_expired() at most once a minute per process. A failure is logged, never raised: the caller is a
+    request that has nothing to do with the purge."""
+    global _last_purge
+    with _purge_lock:
+        now = time.monotonic()
+        if _last_purge and now - _last_purge < PURGE_EVERY_SECONDS:
+            return
+        _last_purge = now
+    try:
+        purge_expired(db)
+    except Exception:
+        db.rollback()
+        log.exception("Purging expired cleaners failed")

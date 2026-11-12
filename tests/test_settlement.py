@@ -297,13 +297,14 @@ def test_no_cleaner_email_is_a_payout_error(db, job_with_payment, paypal, monkey
     assert events(db)[-1] == "PAYOUT_ERROR"
 
 
-def test_payout_created_audit_row_records_receiver_and_amount(db, job_with_payment, paypal):
+def test_payout_created_audit_row_records_payee_kind_and_amount_but_no_email(db, job_with_payment, paypal):
     job = job_with_payment("20.00")
     settle(db, job, paypal)
     row = db.scalars(select(AuditLog).where(AuditLog.event == "PAYOUT_CREATED")).one()
     assert (row.actor, row.job_id) == ("system", job.id)
-    assert row.payload == {"batch_id": "BATCH1", "receiver": CLEANER,
+    assert row.payload == {"batch_id": "BATCH1", "payee": "default", "cleaner_id": None,
                            "amount": "20.00", "currency": "USD"}
+    assert CLEANER not in str(row.payload)
 
 
 def test_payout_db_write_failure_logs_batch_id_and_rolls_back(db, job_with_payment, paypal, monkeypatch, caplog):

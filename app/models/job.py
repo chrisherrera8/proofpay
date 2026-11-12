@@ -1,9 +1,9 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, and_, func, select
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, and_, func, select
 from sqlalchemy.orm import Mapped, aliased, mapped_column, relationship
 
 from app.db import Base
@@ -41,6 +41,9 @@ class Job(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(3), default="USD")
     authorized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The cleaner is booked for this whole day. cleaner_id goes NULL when the cleaner is purged (the job stays).
+    cleaner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cleaners.id", ondelete="SET NULL"), index=True)
+    service_date: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -54,12 +57,19 @@ class Job(Base):
     verification: Mapped["Verification | None"] = relationship(  # noqa: F821
         primaryjoin=lambda: _latest_verification_join(), viewonly=True, uselist=False
     )
+    # The booked cleaner; None for old jobs and after the cleaner's data was deleted.
+    cleaner: Mapped["Cleaner | None"] = relationship(viewonly=True)  # noqa: F821
     # One payout per job (unique job_id), eager-loaded so listing jobs needs no per-job query.
     payout: Mapped["Payout | None"] = relationship(viewonly=True, uselist=False)  # noqa: F821
     # The newest POLICY_DECIDED audit row, loaded the same way, so the API can show the decision.
     decision_event: Mapped["AuditLog | None"] = relationship(  # noqa: F821
         primaryjoin=lambda: _latest_decision_join(), viewonly=True, uselist=False
     )
+
+    @property
+    def cleaner_name(self) -> str | None:
+        """The booked cleaner's name, or None once their data was deleted. Never written to the audit log."""
+        return self.cleaner.name if self.cleaner else None
 
     @property
     def decision(self) -> dict | None:

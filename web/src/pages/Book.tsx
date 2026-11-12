@@ -1,16 +1,17 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AlertCircle, ChevronLeft, CircleCheck, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Field } from "@/components/field";
 import { cn } from "@/lib/utils";
 import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
-import { authorize, createJob, createOrder } from "../api";
+import { formatDay, todayLocal } from "@/lib/format";
+import { ApiError, authorize, CleanerAvailability, createJob, createOrder, listCleaners } from "../api";
 import { TIERS, tierById } from "../tiers";
 
 const CLIENT_ID = import.meta.env.VITE_PAYPAL_CLIENT_ID as string | undefined;
 
-type Form = { name: string; email: string; address: string; when: string };
+type Form = { name: string; email: string; address: string; when: string; cleaner: string };
 type Errors = Partial<Record<keyof Form, string>>;
 
 // Matches the API's limits (JobCreate in app/schemas.py).
@@ -22,27 +23,24 @@ function validate(f: Form): Errors {
   if (!f.email.trim()) e.email = "Enter your email.";
   else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) e.email = "Enter a valid email, like name@example.com.";
   if (!f.address.trim()) e.address = "Enter the address to clean.";
-  if (!f.when) e.when = "Pick a date and time.";
-  else if (new Date(f.when).getTime() <= Date.now()) e.when = "Pick a time in the future.";
+  if (!f.when) e.when = "Pick a date.";
+  else if (f.when < todayLocal()) e.when = "Pick a date that isn't in the past.";
+  if (!f.cleaner) e.cleaner = "Choose a cleaner.";
   return e;
-}
-
-// datetime-local wants "YYYY-MM-DDTHH:mm" in local time.
-function nowLocal(): string {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
 }
 
 export default function Book() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const tier = tierById(params.get("tier")) ?? TIERS[0];
-  const [form, setForm] = useState<Form>({ name: "", email: "", address: "", when: "" });
+  const [form, setForm] = useState<Form>({ name: "", email: "", address: "", when: "", cleaner: "" });
   const [touched, setTouched] = useState<Partial<Record<keyof Form, boolean>>>({});
   const [showAll, setShowAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Cleaners for the chosen date: null while loading or before a date is picked.
+  const [cleaners, setCleaners] = useState<CleanerAvailability[] | null>(null);
+  const [cleanersError, setCleanersError] = useState<string | null>(null);
   // PayPal buttons keep the callbacks from first render, so read the latest values via refs.
   const formRef = useRef(form);
   formRef.current = form;
@@ -51,11 +49,36 @@ export default function Book() {
   // The job created for the current details. A new one is made if the details or tier change.
   const jobRef = useRef<{ id: string; key: string } | null>(null);
 
+  const loadCleaners = (date: string) => {
+    setCleaners(null);
+    setCleanersError(null);
+    listCleaners(date).then(setCleaners).catch((e) => setCleanersError(e.message));
+  };
+
+  // Availability depends on the date, so reload when it changes. A picked cleaner who is no longer free is dropped.
+  useEffect(() => {
+    if (!form.when || form.when < todayLocal()) {
+      setCleaners(null);
+      return;
+    }
+    let stale = false;
+    setCleaners(null);
+    setCleanersError(null);
+    listCleaners(form.when)
+      .then((c) => {
+        if (stale) return;
+        setCleaners(c);
+        setForm((f) => (c.some((x) => x.id === f.cleaner && x.available) ? f : { ...f, cleaner: "" }));
+      })
+      .catch((e) => !stale && setCleanersError(e.message));
+    return () => { stale = true; };
+  }, [form.when]);
+
   const errors = validate(form);
   const hasErrors = Object.keys(errors).length > 0;
   const shown = (k: keyof Form) => (showAll || touched[k] ? errors[k] : undefined);
 
-  const set = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement>) => {
+  const set = (k: Exclude<keyof Form, "cleaner">) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [k]: e.target.value });
     setError(null);
   };
@@ -66,23 +89,36 @@ export default function Book() {
     const t = tierRef.current;
     // Re-validate: the form can change between the click check and this call.
     if (Object.keys(validate(f)).length) throw new Error("Please fix the highlighted fields.");
-    const key = JSON.stringify([t.id, f.name.trim(), f.email.trim(), f.address.trim(), f.when]);
+    const key = JSON.stringify([t.id, f.name.trim(), f.email.trim(), f.address.trim(), f.when, f.cleaner]);
     // Reuse the job on a retry with identical details; the order endpoint is idempotent per job.
     if (!jobRef.current || jobRef.current.key !== key) {
-      const job = await createJob({
-        customer_name: f.name.trim(),
-        customer_email: f.email.trim(),
-        address: f.address.trim(),
-        service_type: t.id,
-        scheduled_at: new Date(f.when).toISOString(),
-        amount: t.price,
-      });
+      let job;
+      try {
+        job = await createJob({
+          customer_name: f.name.trim(),
+          customer_email: f.email.trim(),
+          address: f.address.trim(),
+          service_type: t.id,
+          cleaner_id: f.cleaner,
+          service_date: f.when,
+          amount: t.price,
+        });
+      } catch (e) {
+        // 409: someone took this cleaner's day first. Refresh the list and send the customer back to the picker.
+        if (e instanceof ApiError && (e.status === 409 || e.status === 404)) {
+          setForm((cur) => ({ ...cur, cleaner: "" }));
+          loadCleaners(f.when);
+          document.getElementById("cleaner-heading")?.focus();
+          throw new Error(`${e.message} Please choose a cleaner again.`);
+        }
+        throw e;
+      }
       jobRef.current = { id: job.id, key };
     }
     return (await createOrder(jobRef.current.id)).order_id;
   }
 
-  const field = (k: keyof Form, label: string, props: React.InputHTMLAttributes<HTMLInputElement>) => (
+  const field = (k: Exclude<keyof Form, "cleaner">, label: string, props: React.InputHTMLAttributes<HTMLInputElement> & { hint?: string }) => (
     <Field
       id={k}
       label={label}
@@ -134,24 +170,80 @@ export default function Book() {
             </div>
           </section>
 
+          <section aria-labelledby="when-heading" className="rounded-xl border bg-card p-5 shadow-xs sm:p-6">
+            <h2 id="when-heading" className="font-semibold">2. Pick a day and a cleaner</h2>
+            <form className="mt-4 grid gap-5" noValidate onSubmit={(e) => e.preventDefault()}>
+              <div className="sm:max-w-xs">
+                {field("when", "Date", { type: "date", min: todayLocal(), hint: "Your cleaner is booked for the whole day." })}
+              </div>
+            </form>
+            {form.when && !errors.when && (
+              <fieldset className="mt-5 min-w-0" aria-describedby={shown("cleaner") ? "cleaner-err" : undefined}>
+                <legend id="cleaner-heading" tabIndex={-1} className="text-sm font-medium outline-none">Choose your cleaner</legend>
+                {cleanersError && <p role="alert" className="mt-3 text-sm text-destructive">{cleanersError}</p>}
+                {!cleaners && !cleanersError && (
+                  <div role="status" aria-label="Loading cleaners" className="mt-3 grid gap-3">
+                    {[0, 1].map((i) => <div key={i} className="h-14 animate-pulse rounded-lg bg-muted" />)}
+                  </div>
+                )}
+                {cleaners && (
+                  <div role="radiogroup" aria-labelledby="cleaner-heading" className="mt-3 grid gap-3">
+                    {cleaners.map((c) => {
+                      const active = c.id === form.cleaner;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          disabled={busy || !c.available}
+                          onClick={() => { setForm({ ...form, cleaner: c.id }); setError(null); }}
+                          className={cn(
+                            "flex min-h-11 items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60 disabled:hover:bg-muted",
+                            active && "border-primary bg-accent ring-1 ring-primary hover:bg-accent",
+                          )}
+                        >
+                          <span className={cn("text-sm font-medium", active && "text-accent-foreground")}>{c.name}</span>
+                          <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                            {c.available ? "Free" : `Booked on ${formatDay(form.when)}`}
+                            {active && <CircleCheck className="size-4 text-primary" aria-hidden />}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {cleaners.every((c) => !c.available) && (
+                      <p className="text-sm text-muted-foreground">Everyone is booked that day. Try another date.</p>
+                    )}
+                  </div>
+                )}
+                {shown("cleaner") && <p id="cleaner-err" className="mt-2 text-sm text-destructive">{errors.cleaner}</p>}
+              </fieldset>
+            )}
+          </section>
+
           <section aria-labelledby="details" className="rounded-xl border bg-card p-5 shadow-xs sm:p-6">
-            <h2 id="details" className="font-semibold">2. Your details</h2>
+            <h2 id="details" className="font-semibold">3. Your details</h2>
             <form className="mt-4 grid gap-5 sm:grid-cols-2" noValidate onSubmit={(e) => e.preventDefault()}>
               {field("name", "Full name", { autoComplete: "name", maxLength: MAX.name })}
               {field("email", "Email", { type: "email", autoComplete: "email", maxLength: MAX.email })}
               <div className="sm:col-span-2">{field("address", "Address", { autoComplete: "street-address", maxLength: MAX.address })}</div>
-              {field("when", "Date and time", { type: "datetime-local", min: nowLocal() })}
             </form>
           </section>
         </div>
 
         <aside aria-labelledby="summary" className="rounded-xl border bg-card p-5 shadow-xs sm:p-6 lg:sticky lg:top-24">
-          <h2 id="summary" className="font-semibold">3. Review and pay</h2>
+          <h2 id="summary" className="font-semibold">4. Review and pay</h2>
           <dl className="mt-4 grid gap-3 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">{tier.name}</dt>
               <dd className="tabular-nums">${tier.price}.00</dd>
             </div>
+            {form.when && !errors.when && (
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Day</dt>
+                <dd>{formatDay(form.when)}{cleaners?.find((c) => c.id === form.cleaner) && ` · ${cleaners.find((c) => c.id === form.cleaner)!.name}`}</dd>
+              </div>
+            )}
             <div className="flex justify-between gap-4 border-t pt-3 text-base font-semibold">
               <dt>Held today</dt>
               <dd className="tabular-nums">${tier.price}.00</dd>

@@ -1,13 +1,32 @@
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import approvals, cleaner, jobs, paypal, webhooks
+from app.api import approvals, cleaner, cleaners, jobs, maintenance, paypal, webhooks
+from app.cleaners import ensure_default_cleaner
 from app.config import get_settings
+from app.db import SessionLocal
 from app.state_machine import InvalidTransition
 from app.vision import VisionError
 
-app = FastAPI(title="ProofPay")
+log = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Best effort: the roster endpoint also creates the default cleaner if this fails.
+    try:
+        with SessionLocal() as db:
+            ensure_default_cleaner(db)
+    except Exception:
+        log.exception("Could not create the default cleaner at startup")
+    yield
+
+
+app = FastAPI(title="ProofPay", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origins,
@@ -17,6 +36,8 @@ app.add_middleware(
 app.include_router(jobs.router)
 app.include_router(paypal.router)
 app.include_router(cleaner.router)
+app.include_router(cleaners.router)
+app.include_router(maintenance.router)
 app.include_router(approvals.router)
 app.include_router(webhooks.router)
 

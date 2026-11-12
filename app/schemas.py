@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
 
@@ -16,15 +16,18 @@ class JobCreate(BaseModel):
     customer_email: str = Field(min_length=3, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     address: str = Field(min_length=1, max_length=500)
     service_type: ServiceType
-    scheduled_at: datetime
+    cleaner_id: uuid.UUID
+    # The cleaner is booked for this whole day; there are no time slots.
+    service_date: date
     amount: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
     currency: Literal["USD"] = "USD"
 
-    @field_validator("scheduled_at")
+    @field_validator("service_date")
     @classmethod
-    def _tz_aware(cls, v: datetime) -> datetime:
-        if v.tzinfo is None:
-            raise ValueError("scheduled_at must include a timezone")
+    def _not_in_the_past(cls, v: date) -> date:
+        # One day of slack, because the customer's local "today" can be a day behind or ahead of UTC.
+        if v < datetime.now(timezone.utc).date() - timedelta(days=1):
+            raise ValueError("service_date can't be in the past")
         return v
 
     @model_validator(mode="after")
@@ -33,6 +36,28 @@ class JobCreate(BaseModel):
         if self.amount != expected:
             raise ValueError(f"amount for {self.service_type} must be {expected}")
         return self
+
+
+class CleanerCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)  # trim before the length and pattern checks
+
+    name: str = Field(min_length=1, max_length=200)
+    paypal_email: str = Field(min_length=3, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+class CleanerOut(BaseModel):
+    """Public view: the PayPal email is never returned (the list endpoint has no auth)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    is_seed: bool
+    created_at: datetime
+
+
+class CleanerAvailability(CleanerOut):
+    available: bool
 
 
 class ChecklistItemOut(BaseModel):
@@ -105,6 +130,9 @@ class JobOut(BaseModel):
     currency: str
     authorized_at: datetime | None
     created_at: datetime
+    cleaner_id: uuid.UUID | None = None
+    cleaner_name: str | None = None
+    service_date: date | None = None
     checklist_items: list[ChecklistItemOut]
     payment: PaymentSummary | None
     verification: VerificationOut | None = None

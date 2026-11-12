@@ -1,3 +1,5 @@
+import datetime as dt
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -5,7 +7,7 @@ from sqlalchemy import select
 from app.audit import verify_chain
 from app.db import get_db
 from app.main import app
-from app.models import AuditLog, Job
+from app.models import AuditLog, Cleaner, Job
 
 
 @pytest.fixture
@@ -15,22 +17,31 @@ def client(db):
     app.dependency_overrides.clear()
 
 
-BODY = {
-    "customer_name": "Ada Lovelace",
-    "customer_email": "ada@example.com",
-    "address": "12 Analytical Way",
-    "service_type": "basic",
-    "scheduled_at": "2026-11-10T09:00:00Z",
-    "amount": "10.00",
-}
+FUTURE = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=7)).date()
+
+
+@pytest.fixture
+def body(db):
+    cleaner = Cleaner(name="Test Cleaner", paypal_email="cleaner@example.com")
+    db.add(cleaner)
+    db.commit()
+    return {
+        "customer_name": "Ada Lovelace",
+        "customer_email": "ada@example.com",
+        "address": "12 Analytical Way",
+        "service_type": "basic",
+        "cleaner_id": str(cleaner.id),
+        "service_date": FUTURE.isoformat(),
+        "amount": "10.00",
+    }
 
 
 def test_healthz(client):
     assert client.get("/healthz").json() == {"status": "ok"}
 
 
-def test_book_job_happy_path(client, db):
-    r = client.post("/api/jobs", json=BODY)
+def test_book_job_happy_path(client, db, body):
+    r = client.post("/api/jobs", json=body)
     assert r.status_code == 201
     data = r.json()
     assert data["status"] == "BOOKED"
@@ -47,16 +58,16 @@ def test_book_job_happy_path(client, db):
     assert verify_chain(db) is None
 
 
-def test_checklist_copied_from_template(client):
-    items = client.post("/api/jobs", json=BODY).json()["checklist_items"]
+def test_checklist_copied_from_template(client, body):
+    items = client.post("/api/jobs", json=body).json()["checklist_items"]
     assert [i["label"] for i in items] == ["Kitchen", "Bathroom", "Floors", "Surfaces"]
     assert [i["position"] for i in items] == [0, 1, 2, 3]
     assert [i["required"] for i in items] == [True, True, True, True]
 
 
 @pytest.mark.parametrize("amount", ["0", "-5", "0.00", "abc", "10.001"])
-def test_invalid_amount_rejected(client, db, amount):
-    r = client.post("/api/jobs", json={**BODY, "amount": amount})
+def test_invalid_amount_rejected(client, db, amount, body):
+    r = client.post("/api/jobs", json={**body, "amount": amount})
     assert r.status_code == 422
     assert db.scalars(select(Job)).all() == []
     assert db.scalars(select(AuditLog)).all() == []
@@ -65,8 +76,8 @@ def test_invalid_amount_rejected(client, db, amount):
 @pytest.mark.parametrize(
     "service_type,amount", [("basic", "10.00"), ("deep", "20.00"), ("deluxe", "30.00")]
 )
-def test_each_tier_books_at_its_price(client, service_type, amount):
-    r = client.post("/api/jobs", json={**BODY, "service_type": service_type, "amount": amount})
+def test_each_tier_books_at_its_price(client, service_type, amount, body):
+    r = client.post("/api/jobs", json={**body, "service_type": service_type, "amount": amount})
     assert r.status_code == 201
     assert r.json()["amount"] == amount
 
@@ -75,31 +86,27 @@ def test_each_tier_books_at_its_price(client, service_type, amount):
     "service_type,amount",
     [("deluxe", "1.00"), ("deluxe", "10.00"), ("basic", "30.00"), ("deep", "20.01"), ("basic", "9.99")],
 )
-def test_wrong_price_for_tier_rejected(client, db, service_type, amount):
-    r = client.post("/api/jobs", json={**BODY, "service_type": service_type, "amount": amount})
+def test_wrong_price_for_tier_rejected(client, db, service_type, amount, body):
+    r = client.post("/api/jobs", json={**body, "service_type": service_type, "amount": amount})
     assert r.status_code == 422
     assert db.scalars(select(Job)).all() == []
     assert db.scalars(select(AuditLog)).all() == []
 
 
-def test_unknown_service_type_rejected(client):
-    assert client.post("/api/jobs", json={**BODY, "service_type": "moat_dredging"}).status_code == 422
+def test_unknown_service_type_rejected(client, body):
+    assert client.post("/api/jobs", json={**body, "service_type": "moat_dredging"}).status_code == 422
 
 
-def test_unsupported_currency_rejected(client):
-    assert client.post("/api/jobs", json={**BODY, "currency": "EUR"}).status_code == 422
+def test_unsupported_currency_rejected(client, body):
+    assert client.post("/api/jobs", json={**body, "currency": "EUR"}).status_code == 422
 
 
-def test_naive_scheduled_at_rejected(client):
-    assert client.post("/api/jobs", json={**BODY, "scheduled_at": "2026-11-10T09:00:00"}).status_code == 422
+def test_bad_email_rejected(client, body):
+    assert client.post("/api/jobs", json={**body, "customer_email": "nope"}).status_code == 422
 
 
-def test_bad_email_rejected(client):
-    assert client.post("/api/jobs", json={**BODY, "customer_email": "nope"}).status_code == 422
-
-
-def test_get_job(client):
-    job_id = client.post("/api/jobs", json=BODY).json()["id"]
+def test_get_job(client, body):
+    job_id = client.post("/api/jobs", json=body).json()["id"]
     r = client.get(f"/api/jobs/{job_id}")
     assert r.status_code == 200
     assert r.json()["id"] == job_id
@@ -114,10 +121,19 @@ def test_get_malformed_id_422(client):
     assert client.get("/api/jobs/not-a-uuid").status_code == 422
 
 
-def test_list_jobs_and_status_filter(client, make_job):
-    client.post("/api/jobs", json=BODY)
+def test_list_jobs_and_status_filter(client, make_job, body):
+    client.post("/api/jobs", json=body)
     make_job("AUTHORIZED")
     assert len(client.get("/api/jobs").json()) == 2
     booked = client.get("/api/jobs", params={"status": "BOOKED"}).json()
     assert [j["status"] for j in booked] == ["BOOKED"]
     assert client.get("/api/jobs", params={"status": "BOGUS"}).status_code == 422
+
+
+# web/src/tiers.ts shows these prices to customers, so they must match what the API accepts.
+@pytest.mark.parametrize("tier,price", [("basic", "10.00"), ("deep", "20.00"), ("deluxe", "30.00")])
+def test_tier_prices_match_web(client, body, tier, price):
+    ok = client.post("/api/jobs", json={**body, "service_type": tier, "amount": price})
+    assert ok.status_code == 201
+    other = "20.00" if price != "20.00" else "10.00"
+    assert client.post("/api/jobs", json={**body, "service_type": tier, "amount": other}).status_code == 422

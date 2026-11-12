@@ -36,7 +36,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <ShieldCheck className="size-4 text-primary" aria-hidden />
             Payments secured by ProofPay: you're only charged once the work is verified.
           </p>
-          <p>Demo site · PayPal sandbox, no real money moves.</p>
+          <p>Demo site · PayPal sandbox, no real money moves. Demo data resets after 24 hours.</p>
         </div>
       </footer>
     </div>

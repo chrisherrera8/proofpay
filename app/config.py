@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 DEFAULT_CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
+DEFAULT_CLEANER_NAME = "Sparkle Crew"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -36,7 +38,11 @@ class Settings(BaseSettings):
     paypal_base_url: str = "https://api-m.sandbox.paypal.com"
 
     paypal_webhook_id: str = ""
+    # The one permanent demo cleaner: paid at paypal_cleaner_email, shown under default_cleaner_name.
     paypal_cleaner_email: str = ""
+    default_cleaner_name: str = DEFAULT_CLEANER_NAME
+    # Bearer token for POST /api/maintenance/purge (an external pinger). Unset = the endpoint answers 503.
+    maintenance_token: str = ""
 
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.6-flash"

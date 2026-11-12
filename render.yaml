@@ -22,3 +22,11 @@ services:
         sync: false
       - key: CORS_ORIGINS # the site URL, e.g. https://proofpay.<you>.workers.dev (comma-separate several)
         sync: false
+      - key: PAYPAL_CLEANER_EMAIL # sandbox account paid for the default cleaner
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: DEFAULT_CLEANER_NAME # optional, defaults to Sparkle Crew
+        sync: false
+      - key: MAINTENANCE_TOKEN # optional, enables POST /api/maintenance/purge
+        sync: false

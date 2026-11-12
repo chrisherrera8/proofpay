@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { CalendarDays, CircleCheck, MapPin, Wallet } from "lucide-react";
+import { CalendarDays, CircleCheck, MapPin, UserRound, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Page } from "@/components/layout";
 import { JobTimeline } from "@/components/job-timeline";
 import { SectionCard } from "@/components/section-card";
 import { ErrorAlert, PageSkeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
-import { formatMoney, formatWhen } from "@/lib/format";
+import { formatDay, formatMoney, formatWhen } from "@/lib/format";
 import { getJob, Job } from "../api";
 import { tierById } from "../tiers";
 
@@ -44,7 +44,11 @@ export default function Booked() {
           <dl className="grid gap-3 text-sm">
             <div className="flex gap-3">
               <dt><CalendarDays className="size-4 text-muted-foreground" aria-label="When" /></dt>
-              <dd>{formatWhen(job.scheduled_at)}</dd>
+              <dd>{job.service_date ? formatDay(job.service_date) : formatWhen(job.scheduled_at)}</dd>
+            </div>
+            <div className="flex gap-3">
+              <dt><UserRound className="size-4 text-muted-foreground" aria-label="Cleaner" /></dt>
+              <dd>{job.cleaner_name ?? "Your cleaner (their demo data has been deleted)"}</dd>
             </div>
             <div className="flex gap-3">
               <dt><MapPin className="size-4 text-muted-foreground" aria-label="Where" /></dt>

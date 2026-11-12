@@ -8,6 +8,9 @@ os.environ["DATABASE_URL"] = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://proofpay:proofpay@localhost:5433/proofpay"
 )
 
+# Keep a developer's .env payee out of the tests; tests that need a default cleaner set it themselves.
+os.environ["PAYPAL_CLEANER_EMAIL"] = ""
+
 from datetime import datetime, timezone  # noqa: E402
 from decimal import Decimal  # noqa: E402
 
@@ -22,7 +25,7 @@ from app.db import engine  # noqa: E402
 from app.models import Job  # noqa: E402
 
 TABLES = (
-    "audit_log, approvals, verifications, payouts, photos, payments, checklist_items, mandates, jobs"
+    "audit_log, approvals, verifications, payouts, photos, payments, checklist_items, mandates, jobs, cleaners"
 )
 
 
