@@ -85,16 +85,29 @@ describe("success and requests", () => {
   });
 
   it("listJobs always sends the cleaner id", async () => {
-    await listJobs("AUTHORIZED", "c1");
+    await listJobs("c1", { status: "AUTHORIZED" });
     const [req] = find("GET", "/api/jobs");
     expect(req.url.searchParams.get("status")).toBe("AUTHORIZED");
     expect(req.url.searchParams.get("cleaner_id")).toBe("c1");
   });
 
-  it("listJobs encodes status and cleaner id", async () => {
-    await listJobs("A&B", "x/y");
+  it("listJobs omits status and limit when not given", async () => {
+    await listJobs("c1");
     const [req] = find("GET", "/api/jobs");
-    expect(req.url.search).toBe("?status=A%26B&cleaner_id=x%2Fy");
+    expect(req.url.search).toBe("?cleaner_id=c1");
+  });
+
+  it("listJobs sends limit when given", async () => {
+    await listJobs("c1", { limit: 200 });
+    const [req] = find("GET", "/api/jobs");
+    expect(req.url.searchParams.get("limit")).toBe("200");
+    expect(req.url.searchParams.has("status")).toBe(false);
+  });
+
+  it("listJobs encodes status and cleaner id", async () => {
+    await listJobs("x/y", { status: "A&B" });
+    const [req] = find("GET", "/api/jobs");
+    expect(req.url.search).toBe("?cleaner_id=x%2Fy&status=A%26B");
   });
 
   it("getCleaner encodes the id", async () => {
