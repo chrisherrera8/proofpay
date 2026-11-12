@@ -9,6 +9,7 @@ import { ErrorAlert, PageSkeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDay, formatMoney, formatWhen } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { tierById } from "../tiers";
 import { deletePhoto, getJob, Job, listPhotos, Photo, photoUrl, settleJob, submitJob, uploadPhoto, verifyJob } from "../api";
 import { resizeImage } from "../resize";
 
@@ -218,19 +219,35 @@ export default function CleanerJob() {
   const v = job.verification;
 
   return (
-    <Page flush>
+    <div className="mx-auto w-full max-w-4xl py-8 sm:py-12 lg:py-8">
       <Link to="/cleaner" className="inline-flex lg:hidden items-center gap-1 rounded text-sm text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
         <ChevronLeft className="size-4" aria-hidden /> All jobs
       </Link>
-      <div className="mt-3 flex flex-col gap-3">
-        <StatusBadge status={job.status} />
-        <h1 className="text-2xl font-semibold sm:text-3xl">{job.address}</h1>
-        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <CalendarDays className="size-4" aria-hidden /> {job.service_date ? formatDay(job.service_date) : formatWhen(job.scheduled_at)}
-        </p>
-      </div>
+      <header className="mt-3 rounded-2xl border bg-card p-6 shadow-xs lg:mt-0 sm:p-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
+            {tierById(job.service_type)?.name ?? job.service_type}
+          </p>
+          <StatusBadge status={job.status} />
+        </div>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">{job.address}</h1>
+        <dl className="mt-6 grid gap-4 border-t pt-5 sm:grid-cols-2">
+          <div>
+            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Service date</dt>
+            <dd className="mt-1 flex items-center gap-1.5 font-medium">
+              <CalendarDays className="size-4 text-muted-foreground" aria-hidden />
+              {job.service_date ? formatDay(job.service_date) : formatWhen(job.scheduled_at)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Job value</dt>
+            <dd className="mt-1 font-medium tabular-nums">{formatMoney(job.amount, job.currency)}</dd>
+          </div>
+        </dl>
+      </header>
 
-      <div className="mt-8 grid gap-6">
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="grid gap-6">
         <DecisionPanel job={job} />
         <PaymentPanel job={job} working={working} onRetry={() => run(settleJob)} />
 
@@ -258,19 +275,6 @@ export default function CleanerJob() {
           </SectionCard>
         )}
 
-        <SectionCard title="Checklist">
-          {editable && <p className="-mt-2 mb-3 text-sm text-muted-foreground">Take a before photo, clean, then take after photos that show each item below.</p>}
-          <ul className="grid gap-2 text-sm">
-            {job.checklist_items.map((i) => (
-              <li key={i.id} className="flex items-center gap-3">
-                <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
-                {i.label}
-                {i.required && <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Required</span>}
-              </li>
-            ))}
-          </ul>
-        </SectionCard>
-
         <PhotoSlot jobId={jobId} kind="before" photos={photos} locked={!editable} onChange={refresh} onError={setError} />
         <PhotoSlot jobId={jobId} kind="after" photos={photos} locked={!editable} onChange={refresh} onError={setError} />
 
@@ -293,10 +297,25 @@ export default function CleanerJob() {
           </div>
         )}
 
+      </div>
+      <aside className="grid gap-6 xl:sticky xl:top-0">
+        <SectionCard title="Checklist">
+          {editable && <p className="-mt-2 mb-3 text-sm text-muted-foreground">Take a before photo, clean, then take after photos that show each item below.</p>}
+          <ul className="grid gap-2 text-sm">
+            {job.checklist_items.map((i) => (
+              <li key={i.id} className="flex items-center gap-3">
+                <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+                {i.label}
+                {i.required && <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Required</span>}
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
         <SectionCard title="Progress">
           <JobTimeline status={job.status} />
         </SectionCard>
+      </aside>
       </div>
-    </Page>
+    </div>
   );
 }
