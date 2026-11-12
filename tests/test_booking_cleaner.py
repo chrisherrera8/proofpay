@@ -162,6 +162,20 @@ def test_stale_job_with_an_order_cannot_authorize_after_the_day_is_taken(client,
     assert db.get(Job, stale).status == "BOOKED"
 
 
+def test_cleaner_can_be_booked_again_the_same_day_after_payout(client, db, make_cleaner, paypal):
+    c = make_cleaner()
+    first = client.post("/api/jobs", json=body(c)).json()["id"]
+    db.execute(text("UPDATE jobs SET status = 'CAPTURED' WHERE id = :i"), {"i": first})
+    db.commit()
+    assert client.post("/api/jobs", json=body(c, customer_email="bob@example.com")).status_code == 409
+    db.execute(text("UPDATE jobs SET status = 'PAID_OUT' WHERE id = :i"), {"i": first})
+    db.commit()
+    second = client.post("/api/jobs", json=body(c, customer_email="bob@example.com"))
+    assert second.status_code == 201
+    order = client.post(f"/api/jobs/{second.json()['id']}/paypal/order")
+    assert order.status_code == 200  # a paid-out sibling does not block payment
+
+
 def test_a_job_does_not_conflict_with_itself(client, make_cleaner, paypal):
     c = make_cleaner()
     job = client.post("/api/jobs", json=body(c)).json()["id"]

@@ -163,6 +163,25 @@ def test_old_booked_job_does_not_release_an_authorized_one(client, db, make_job,
     assert roster(client)["Busy"]["available"] is False
 
 
+def test_paid_out_job_frees_the_cleaner_for_that_day(client, db, make_job, make_cleaner, no_default):
+    c = make_cleaner("Done")
+    book(db, make_job, c, status="PAID_OUT")
+    assert roster(client)["Done"]["available"] is True
+    assert set(roster(client, available="true")) == {"Done"}
+
+
+def test_captured_job_still_holds_the_day_until_paid_out(client, db, make_job, make_cleaner, no_default):
+    book(db, make_job, make_cleaner("Waiting"), status="CAPTURED")
+    assert roster(client)["Waiting"]["available"] is False
+
+
+def test_paid_out_job_does_not_release_another_active_job_that_day(client, db, make_job, make_cleaner, no_default):
+    c = make_cleaner("Busy")
+    book(db, make_job, c, status="PAID_OUT")
+    book(db, make_job, c, status="AUTHORIZED")
+    assert roster(client)["Busy"]["available"] is False
+
+
 def test_roster_needs_a_valid_date(client):
     assert client.get("/api/cleaners").status_code == 422
     assert client.get("/api/cleaners", params={"date": "tomorrow"}).status_code == 422
