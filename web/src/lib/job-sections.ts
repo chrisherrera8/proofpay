@@ -6,9 +6,15 @@ export interface JobSection {
   statuses: string[];
 }
 
+// Display status: a CAPTURED job whose payout failed is its own state, since the money is stuck until the
+// cleaner acts. Everything list-related (badge, chips, sections) goes through this.
+export const PAYOUT_FAILED = "PAYOUT_FAILED";
+export const displayStatus = (j: Job): string =>
+  j.status === "CAPTURED" && j.payout?.status === "FAILED" ? PAYOUT_FAILED : j.status;
+
 // Grouped by what the cleaner should do. Order matters: sections, and statuses within them, render in this order.
 export const JOB_SECTIONS: JobSection[] = [
-  { id: "attention", title: "Needs your attention", statuses: ["REJECTED", "AUTHORIZED"] },
+  { id: "attention", title: "Needs your attention", statuses: ["REJECTED", PAYOUT_FAILED, "AUTHORIZED"] },
   { id: "review", title: "In review", statuses: ["SUBMITTED", "VERIFIED", "PENDING_APPROVAL"] },
   { id: "payment", title: "Payment", statuses: ["RELEASED", "CAPTURED"] },
   { id: "completed", title: "Completed", statuses: ["PAID_OUT"] },
@@ -44,13 +50,13 @@ export interface GroupedJobs {
 }
 
 export function groupJobs(jobs: Job[], statusFilter: string | null = null): GroupedJobs[] {
-  const shown = statusFilter ? jobs.filter((j) => j.status === statusFilter) : jobs;
+  const shown = statusFilter ? jobs.filter((j) => displayStatus(j) === statusFilter) : jobs;
   return [...JOB_SECTIONS, OTHER]
     .map((section) => ({
       section,
       jobs: shown
-        .filter((j) => sectionFor(j.status) === section)
-        .sort((a, b) => statusRank(a.status) - statusRank(b.status) || byServiceDate(a, b)),
+        .filter((j) => sectionFor(displayStatus(j)) === section)
+        .sort((a, b) => statusRank(displayStatus(a)) - statusRank(displayStatus(b)) || byServiceDate(a, b)),
     }))
     .filter((g) => g.jobs.length > 0);
 }
@@ -63,7 +69,7 @@ export interface StatusCount {
 // Chip data: only statuses that appear, in section order then status order; unknown ones last.
 export function statusCounts(jobs: Job[]): StatusCount[] {
   const counts = new Map<string, number>();
-  for (const j of jobs) counts.set(j.status, (counts.get(j.status) ?? 0) + 1);
+  for (const j of jobs) counts.set(displayStatus(j), (counts.get(displayStatus(j)) ?? 0) + 1);
   const unknown = [...counts.keys()].filter((s) => !KNOWN.includes(s)).sort();
   return [...KNOWN, ...unknown].filter((s) => counts.has(s)).map((status) => ({ status, count: counts.get(status)! }));
 }
