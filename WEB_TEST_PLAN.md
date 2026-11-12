@@ -165,51 +165,51 @@ This page handles money and has the most logic. Split it into `Book.form.test.ts
 
 **Service tier**
 
-- [ ] No `?tier=` and `?tier=bogus` both select Basic at $10.
-- [ ] Clicking Deep Clean sets `?tier=deep` and shows $20.00 in the summary twice.
+- [x] No `?tier=` and `?tier=bogus` both select Basic at $10.
+- [x] Clicking Deep Clean sets `?tier=deep` and shows $20.00 in the summary twice.
 
 **Validation and error timing**
 
-- [ ] Before blur, there are no errors. After blur, each field shows its own message.
-- [ ] Bad email, whitespace-only name and whitespace-only address each show their message.
-- [ ] A past date shows "Pick a date that isn't in the past." and hides the cleaner picker. Today and tomorrow are both accepted.
-- [ ] Typing in any field clears the top-level error alert.
+- [x] Before blur, there are no errors. After blur, each field shows its own message.
+- [x] Bad email, whitespace-only name and whitespace-only address each show their message.
+- [x] A past date shows "Pick a date that isn't in the past." and hides the cleaner picker. Today and tomorrow are both accepted.
+- [x] Typing in any field clears the top-level error alert.
 
 **Cleaner picker**
 
-- [ ] It's hidden until a valid date is set. Then it shows "Loading cleaners", then the list.
-- [ ] Unavailable cleaners are disabled and read "Booked on Fri, Nov 20". Available ones read "Free".
-- [ ] When everyone is unavailable, "Everyone is booked that day" shows.
-- [ ] When `listCleaners` fails, the error shows inside the fieldset.
-- [ ] Picking a cleaner adds "· Ana" to the summary's Day row.
-- [ ] Change the date to one where the picked cleaner is booked: the selection is dropped. Where they're still free, it's kept.
-- [ ] Stale response: change the date twice, and make the first response resolve last (with deferred handlers). The second date's list wins.
+- [x] It's hidden until a valid date is set. Then it shows "Loading cleaners", then the list.
+- [x] Unavailable cleaners are disabled and read "Booked on Fri, Nov 20". Available ones read "Free".
+- [x] When everyone is unavailable, "Everyone is booked that day" shows.
+- [x] When `listCleaners` fails, the error shows inside the fieldset.
+- [x] Picking a cleaner adds "· Ana" to the summary's Day row.
+- [x] Change the date to one where the picked cleaner is booked: the selection is dropped. Where they're still free, it's kept.
+- [x] Stale response: change the date twice, and make the first response resolve last (with deferred handlers). The second date's list wins.
 
 **makeOrder (through the stub's `createOrder`)**
 
-- [ ] When the form is invalid, it throws "Please fix the highlighted fields." and sends no `createJob`.
-- [ ] The payload is trimmed, with `service_type` and `amount` taken from the tier, plus `cleaner_id` and `service_date`.
-- [ ] Calling it twice with identical details sends one `createJob` and two `createOrder`.
-- [ ] Changing only whitespace (`"Ana"` to `"Ana "`) still reuses the job.
-- [ ] Changing any detail or the tier sends a new `createJob`.
-- [ ] `createJob` succeeds but `createOrder` fails: on retry, only `createOrder` is called.
-- [ ] `createJob` 409: the cleaner is cleared, `listCleaners` is called again, focus moves to the "Choose your cleaner" legend, and the alert ends with "Please choose a cleaner again."
-- [ ] `createJob` 404 behaves the same as 409.
-- [ ] `createJob` 500 shows the API message as-is, and the cleaner stays selected.
+- [x] When the form is invalid, it throws "Please fix the highlighted fields." and sends no `createJob`.
+- [x] The payload is trimmed, with `service_type` and `amount` taken from the tier, plus `cleaner_id` and `service_date`.
+- [x] Calling it twice with identical details sends one `createJob` and two `createOrder`.
+- [x] Changing only whitespace (`"Ana"` to `"Ana "`) still reuses the job.
+- [x] Changing any detail or the tier sends a new `createJob`.
+- [x] `createJob` succeeds but `createOrder` fails: on retry, only `createOrder` is called.
+- [x] `createJob` 409: the cleaner is cleared, `listCleaners` is called again, focus moves to the "Choose your cleaner" legend, and the alert ends with "Please choose a cleaner again."
+- [x] `createJob` 404 behaves the same as 409.
+- [x] `createJob` 500 shows the API message as-is, and the cleaner stays selected.
 
 **PayPal callbacks**
 
-- [ ] `onClick` on an invalid form calls `actions.reject`, shows every field error at once, and shows "Please fix the highlighted fields before paying."
-- [ ] `onClick` on a valid form calls `actions.resolve` and clears the error.
-- [ ] `onApprove` success: `authorize` gets the job id and order id, and the page lands on `/booked/:id`.
-- [ ] `onApprove` failure: the alert says "…you have not been charged." and the fields and tiers are enabled again.
-- [ ] While `onApprove` is pending, the fields, tiers and cleaner buttons are disabled.
-- [ ] `onCancel` shows "Payment was cancelled…". It **replaces** an existing error; this differs from the other agent's spec.
-- [ ] `onError` shows the PayPal message only when no error is showing. It keeps an existing one, such as a 409 message.
+- [x] `onClick` on an invalid form calls `actions.reject`, shows every field error at once, and shows "Please fix the highlighted fields before paying."
+- [x] `onClick` on a valid form calls `actions.resolve` and clears the error.
+- [x] `onApprove` success: `authorize` gets the job id and order id, and the page lands on `/booked/:id`.
+- [x] `onApprove` failure: the alert says "…you have not been charged." and the fields and tiers are enabled again.
+- [x] While `onApprove` is pending, the fields, tiers and cleaner buttons are disabled.
+- [x] `onCancel` shows "Payment was cancelled…". It **replaces** an existing error; this differs from the other agent's spec.
+- [x] `onError` shows the PayPal message only when no error is showing. It keeps an existing one, such as a 409 message.
 
 **Config**
 
-- [ ] With `VITE_PAYPAL_CLIENT_ID` empty (stub, reset modules, dynamic import), the "Set VITE_PAYPAL_CLIENT_ID…" alert shows and no PayPal button does.
+- [x] With `VITE_PAYPAL_CLIENT_ID` empty (stub, reset modules, dynamic import), the "Set VITE_PAYPAL_CLIENT_ID…" alert shows and no PayPal button does.
 
 ## Phase 6: CleanerJob
 
