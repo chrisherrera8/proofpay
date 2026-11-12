@@ -8,7 +8,8 @@ from app.db import Base
 
 
 class Cleaner(Base):
-    """A demo cleaner. Real sign-ups expire after 24 hours; the single default cleaner (is_seed) never does."""
+    """A demo cleaner. A sign-up expires 24 hours after it was last used (last_used_at); the single default cleaner
+    (is_seed) never does."""
 
     __tablename__ = "cleaners"
     __table_args__ = (
@@ -21,3 +22,5 @@ class Cleaner(Base):
     paypal_email: Mapped[str] = mapped_column(String(320))
     is_seed: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Bumped whenever the workflow touches this cleaner (see touch_cleaner). The 24-hour expiry counts from here.
+    last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

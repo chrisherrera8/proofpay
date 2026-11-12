@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.jobs import JOB_LOAD_OPTIONS
 from app.audit import append_audit
+from app.cleaners import touch_cleaner
 from app.db import get_db
 from app.models import Job, JobStatus, Photo, Verification
 from app.paypal.client import PayPalClient, get_paypal_client
@@ -39,6 +40,8 @@ def _get_job(db: Session, job_id: uuid.UUID) -> Job:
     job = db.scalar(select(Job).options(*JOB_LOAD_OPTIONS).where(Job.id == job_id))
     if job is None:
         raise HTTPException(404, "Job not found")
+    touch_cleaner(db, job.cleaner_id)  # any cleaner-side action on a job counts as using its cleaner
+    db.commit()  # so read-only calls (listing photos) keep the clock too
     return job
 
 

@@ -2,10 +2,11 @@
 import datetime as dt
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
-from app.cleaners import ensure_default_cleaner, get_active_cleaner, list_cleaners, purge_if_due
+from app.cleaners import (ensure_default_cleaner, get_active_cleaner, list_cleaners, purge_if_due,
+                          sign_up_or_resume, touch_cleaner)
 from app.db import get_db
 from app.models import Cleaner
 from app.schemas import CleanerAvailability, CleanerCreate, CleanerOut
@@ -14,10 +15,12 @@ router = APIRouter(prefix="/api/cleaners", tags=["cleaners"])
 
 
 @router.post("", response_model=CleanerOut, status_code=201)
-def sign_up(body: CleanerCreate, db: Session = Depends(get_db)) -> Cleaner:
-    cleaner = Cleaner(name=body.name, paypal_email=body.paypal_email)
-    db.add(cleaner)
-    db.commit()
+def sign_up(body: CleanerCreate, response: Response, db: Session = Depends(get_db)) -> Cleaner:
+    """Create a cleaner, or sign back in to the active one with the same PayPal email (200, name unchanged).
+    Either way the 24-hour clock restarts."""
+    cleaner, created = sign_up_or_resume(db, body.name, body.paypal_email)
+    if not created:
+        response.status_code = 200
     return cleaner
 
 
@@ -42,5 +45,7 @@ def roster(
 def get_cleaner(cleaner_id: uuid.UUID, db: Session = Depends(get_db)) -> Cleaner:
     cleaner = get_active_cleaner(db, cleaner_id)
     if cleaner is None:
-        raise HTTPException(404, "Cleaner not found (sign-ups are deleted after 24 hours)")
+        raise HTTPException(404, "Cleaner not found (sign-ups are deleted after 24 hours without use)")
+    touch_cleaner(db, cleaner.id)
+    db.commit()
     return cleaner

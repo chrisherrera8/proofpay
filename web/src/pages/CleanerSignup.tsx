@@ -67,7 +67,7 @@ export default function CleanerSignup() {
 
       {expired && (
         <p role="status" className="mt-6 rounded-lg bg-warning p-3 text-sm text-warning-foreground">
-          That cleaner account has expired, because demo data is deleted after 24 hours. Sign up again to continue.
+          That cleaner account has expired, because it wasn't used for 24 hours and demo data is then deleted. Sign up again to continue.
         </p>
       )}
 
@@ -96,7 +96,10 @@ export default function CleanerSignup() {
           error={shown("email")}
           disabled={busy}
         />
-        <p className="text-sm text-muted-foreground">Demo data, including your name and email, is deleted 24 hours after you sign up.</p>
+        <p className="text-sm text-muted-foreground">
+          Your account stays available for 24 hours after you last use it, then your name and email are deleted.
+          Signing up again with the same PayPal email takes you back to your existing account.
+        </p>
         {error && <ErrorAlert message={error} />}
         <Button type="submit" size="lg" className="h-11" disabled={busy}>
           {busy && <Loader2 className="animate-spin" aria-hidden />}

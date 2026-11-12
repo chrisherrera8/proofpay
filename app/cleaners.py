@@ -5,7 +5,7 @@ import threading
 import time
 import uuid
 
-from sqlalchemy import and_, delete, exists, func, or_, select
+from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,12 +20,54 @@ CLEANER_TTL = dt.timedelta(hours=24)
 PURGE_EVERY_SECONDS = 60
 # A job that never got authorized stops holding its cleaner for the day after this long.
 UNPAID_HOLD = dt.timedelta(minutes=30)
+# touch_cleaner() writes at most this often per cleaner.
+TOUCH_EVERY = dt.timedelta(minutes=1)
 
 
 def active_cleaner_filter():
-    """SQL condition: the default cleaner, or a sign-up younger than 24 hours. Expired rows are hidden at once,
-    even before anything has deleted them."""
-    return or_(Cleaner.is_seed, Cleaner.created_at > func.now() - CLEANER_TTL)
+    """SQL condition: the default cleaner, or a sign-up used within the last 24 hours. Expired rows are hidden at
+    once, even before anything has deleted them."""
+    return or_(Cleaner.is_seed, Cleaner.last_used_at > func.now() - CLEANER_TTL)
+
+
+def touch_cleaner(db: Session, cleaner_id: uuid.UUID | None) -> None:
+    """Record that the workflow just used this cleaner, which restarts its 24-hour clock. Does not commit: the
+    caller's own commit carries it. Skipped when the stored value is under a minute old, so a polling page
+    doesn't turn every read into a write. A missing or already expired cleaner is left alone (it must not be revived)."""
+    if cleaner_id is None:
+        return
+    db.execute(
+        update(Cleaner)
+        .where(Cleaner.id == cleaner_id, active_cleaner_filter(), Cleaner.last_used_at < func.now() - TOUCH_EVERY)
+        .values(last_used_at=func.now())
+    )
+
+
+def find_by_email(db: Session, email: str) -> Cleaner | None:
+    """The active, non-default cleaner with this PayPal email (case-insensitive), if any. The newest wins if
+    older duplicates exist."""
+    return db.scalar(
+        select(Cleaner)
+        .where(~Cleaner.is_seed, func.lower(Cleaner.paypal_email) == email.strip().lower(), active_cleaner_filter())
+        .order_by(Cleaner.created_at.desc())
+        .limit(1)
+    )
+
+
+def sign_up_or_resume(db: Session, name: str, paypal_email: str) -> tuple[Cleaner, bool]:
+    """(cleaner, created). A PayPal email already held by an active cleaner returns that cleaner (name unchanged)
+    instead of adding a second one; either way its 24-hour clock restarts. Commits."""
+    # Serialise sign-ups for the same email so two simultaneous requests can't both create one.
+    db.execute(select(func.pg_advisory_xact_lock(func.hashtext(paypal_email.strip().lower()))))
+    cleaner = find_by_email(db, paypal_email)
+    created = cleaner is None
+    if created:
+        cleaner = Cleaner(name=name, paypal_email=paypal_email)
+        db.add(cleaner)
+    else:
+        cleaner.last_used_at = func.now()  # an explicit sign-in always counts, whatever touch_cleaner's throttle says
+    db.commit()
+    return cleaner, created
 
 
 def get_active_cleaner(db: Session, cleaner_id: uuid.UUID) -> Cleaner | None:

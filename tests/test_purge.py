@@ -35,7 +35,8 @@ def fresh_throttle(monkeypatch):
 def make_cleaner(db):
     def _make(name, hours_old, is_seed=False) -> Cleaner:
         c = Cleaner(name=name, paypal_email=f"{name.lower()}@example.com", is_seed=is_seed,
-                    created_at=dt.datetime.now(UTC) - dt.timedelta(hours=hours_old))
+                    created_at=dt.datetime.now(UTC) - dt.timedelta(hours=hours_old),
+                    last_used_at=dt.datetime.now(UTC) - dt.timedelta(hours=hours_old))
         db.add(c)
         db.commit()
         return c

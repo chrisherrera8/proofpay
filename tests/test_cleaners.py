@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
-from app.cleaners import ensure_default_cleaner
+from app.cleaners import ensure_default_cleaner, touch_cleaner
 from app.config import get_settings
 from app.db import engine, get_db
 from app.main import app
@@ -33,7 +33,7 @@ def no_default(monkeypatch):
 def make_cleaner(db):
     def _make(name="Cleaner", age=dt.timedelta(0), is_seed=False) -> Cleaner:
         c = Cleaner(name=name, paypal_email=f"{name.lower()}@example.com", is_seed=is_seed,
-                    created_at=dt.datetime.now(dt.timezone.utc) - age)
+                    created_at=dt.datetime.now(dt.timezone.utc) - age, last_used_at=dt.datetime.now(dt.timezone.utc) - age)
         db.add(c)
         db.commit()
         return c
@@ -83,6 +83,33 @@ def test_sign_up_trims_whitespace(client, db):
     assert db.get(Cleaner, r.json()["id"]).paypal_email == "grace@example.com"
 
 
+def test_signing_up_again_with_the_same_email_returns_the_same_cleaner(client, db):
+    first = client.post("/api/cleaners", json=SIGNUP)
+    again = client.post("/api/cleaners", json={"name": "Someone Else", "paypal_email": "GRACE@Example.com "})
+    assert first.status_code == 201 and again.status_code == 200
+    assert again.json()["id"] == first.json()["id"] and again.json()["name"] == "Grace Hopper"
+    assert db.query(Cleaner).filter(Cleaner.paypal_email.ilike("grace@example.com")).count() == 1
+
+
+def test_sign_up_restarts_the_clock_of_the_existing_cleaner(client, db, make_cleaner):
+    c = make_cleaner("Grace", age=dt.timedelta(hours=20))
+    assert client.post("/api/cleaners", json={"name": "Grace", "paypal_email": "grace@example.com"}).status_code == 200
+    db.refresh(c)
+    assert dt.datetime.now(dt.timezone.utc) - c.last_used_at < dt.timedelta(minutes=1)
+
+
+def test_an_expired_cleaner_does_not_block_signing_up_with_its_email(client, db, make_cleaner):
+    old = make_cleaner("Grace", age=dt.timedelta(hours=25))
+    r = client.post("/api/cleaners", json={"name": "Grace", "paypal_email": "grace@example.com"})
+    assert r.status_code == 201 and r.json()["id"] != str(old.id)
+
+
+def test_the_default_cleaners_email_is_not_reused_by_sign_up(client, make_cleaner):
+    seed = make_cleaner("Grace", is_seed=True)
+    r = client.post("/api/cleaners", json={"name": "Grace", "paypal_email": "grace@example.com"})
+    assert r.status_code == 201 and r.json()["id"] != str(seed.id)
+
+
 # --- roster and availability ---------------------------------------------------------------------
 
 def test_roster_marks_a_booked_cleaner_unavailable_only_on_that_day(client, db, make_job, make_cleaner, no_default):
@@ -128,6 +155,52 @@ def test_signups_expire_after_24_hours_but_the_default_does_not(client, db, make
     make_cleaner("Default", age=dt.timedelta(days=30), is_seed=True)
     assert set(roster(client)) == {"Fresh", "Default"}
     assert client.get(f"/api/cleaners/{old.id}").status_code == 404
+
+
+def test_expiry_counts_from_last_use_not_sign_up(client, db, make_cleaner, no_default):
+    c = make_cleaner("Used", age=dt.timedelta(hours=30))
+    c.created_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=48)
+    c.last_used_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)
+    db.commit()
+    assert set(roster(client)) == {"Used"}
+
+
+def _age(db, cleaner, hours):
+    cleaner.last_used_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=hours)
+    db.commit()
+
+
+def _used_recently(db, cleaner) -> bool:
+    db.refresh(cleaner)
+    return dt.datetime.now(dt.timezone.utc) - cleaner.last_used_at < dt.timedelta(minutes=1)
+
+
+def test_looking_up_the_cleaner_and_their_jobs_restarts_the_clock(client, db, make_cleaner, no_default):
+    c = make_cleaner("Busy")
+    for call in (lambda: client.get(f"/api/cleaners/{c.id}"), lambda: client.get("/api/jobs", params={"cleaner_id": str(c.id)})):
+        _age(db, c, 20)
+        assert call().status_code == 200
+        assert _used_recently(db, c)
+
+
+def test_a_cleaner_side_action_on_a_job_restarts_the_clock(client, db, make_job, make_cleaner, no_default):
+    c = make_cleaner("Busy")
+    job = book(db, make_job, c)
+    _age(db, c, 20)
+    assert client.get(f"/api/jobs/{job.id}/photos").status_code == 200
+    assert _used_recently(db, c)
+
+
+def test_touching_is_throttled_and_never_revives_an_expired_cleaner(db, make_cleaner):
+    fresh = make_cleaner("Fresh", age=dt.timedelta(seconds=10))
+    before = fresh.last_used_at
+    touch_cleaner(db, fresh.id)
+    db.refresh(fresh)
+    assert fresh.last_used_at == before  # under a minute old: no write
+    stale = make_cleaner("Stale", age=dt.timedelta(hours=25))
+    touch_cleaner(db, stale.id)
+    db.refresh(stale)
+    assert dt.datetime.now(dt.timezone.utc) - stale.last_used_at > dt.timedelta(hours=24)
 
 
 def test_get_cleaner(client, make_cleaner, no_default):

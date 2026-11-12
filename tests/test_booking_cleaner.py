@@ -37,7 +37,7 @@ def client(db, paypal):
 def make_cleaner(db):
     def _make(name="Cleaner", age=dt.timedelta(0), is_seed=False) -> Cleaner:
         c = Cleaner(name=name, paypal_email=f"{name.lower()}@example.com", is_seed=is_seed,
-                    created_at=dt.datetime.now(UTC) - age)
+                    created_at=dt.datetime.now(UTC) - age, last_used_at=dt.datetime.now(UTC) - age)
         db.add(c)
         db.commit()
         return c
@@ -72,6 +72,13 @@ def test_booking_stores_cleaner_and_date_and_audits_ids_only(client, db, make_cl
     dumped = json.dumps(row.payload) + row.actor
     assert "Grace" not in dumped and "grace@example.com" not in dumped
     assert verify_chain(db) is None
+
+
+def test_booking_restarts_the_cleaners_24_hour_clock(client, db, make_cleaner):
+    c = make_cleaner("Grace", age=dt.timedelta(hours=20))
+    assert client.post("/api/jobs", json=body(c)).status_code == 201
+    db.refresh(c)
+    assert dt.datetime.now(UTC) - c.last_used_at < dt.timedelta(minutes=1)
 
 
 def test_same_cleaner_same_day_is_a_409_and_creates_nothing(client, db, make_cleaner):

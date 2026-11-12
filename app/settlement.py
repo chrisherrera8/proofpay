@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.audit import append_audit
-from app.cleaners import resolve_payee
+from app.cleaners import resolve_payee, touch_cleaner
 from app.models import AuditLog, Job, JobStatus, Payment, Payout
 from app.paypal.client import PayPalClient, PayPalError
 from app.state_machine import InvalidTransition, transition
@@ -28,6 +28,8 @@ PAYOUT_FAILED = "FAILED"
 
 def settle(db: Session, job: Job, paypal: PayPalClient) -> Job:
     """Do the next missing money step for the job, commit, and return the job (whatever its status)."""
+    touch_cleaner(db, job.cleaner_id)  # paying a cleaner counts as using them
+    db.commit()
     status = JobStatus(job.status)
     if status is JobStatus.RELEASED:
         if not _capture(db, job, paypal):
@@ -62,6 +64,7 @@ def settle_after_release(db: Session, job: Job, paypal: PayPalClient) -> None:
 def mark_paid(db: Session, payout: Payout) -> None:
     """The payout reached the cleaner: payout SUCCESS, job CAPTURED -> PAID_OUT. Does not commit."""
     job = db.get(Job, payout.job_id)
+    touch_cleaner(db, job.cleaner_id)
     transition(db, job, JobStatus.PAID_OUT, actor="paypal", event="PAYOUT_SUCCEEDED",
                payload={"payout_id": payout.id, "batch_id": payout.batch_id,
                         "item_id": payout.item_id, "amount": payout.amount})
