@@ -17,6 +17,8 @@ tested code that a person configures.
 
 ```
 BOOKED -> AUTHORIZED -> SUBMITTED -> VERIFIED -+-> RELEASED -> CAPTURED -> PAID_OUT
+                                               +-> PENDING_APPROVAL -+-> RELEASED (approved)
+                                               |                     +-> REJECTED (denied)
                                                +-> REJECTED
 ```
 
@@ -24,7 +26,9 @@ BOOKED -> AUTHORIZED -> SUBMITTED -> VERIFIED -+-> RELEASED -> CAPTURED -> PAID_
    *strict check*, and approves a PayPal `AUTHORIZE` order. No money moves yet (`AUTHORIZED`).
 2. **Submit.** The cleaner uploads before and after photos (resized in the browser) and submits.
 3. **Verify.** A vision model checks each checklist item in the photos (`VERIFIED`).
-4. **Decide.** The policy engine reads the result and picks `RELEASED` or `REJECTED`.
+4. **Decide.** The policy engine reads the result and picks `RELEASED`, `REJECTED`, or
+   `PENDING_APPROVAL` when a person should look first. A manager then approves (`RELEASED`) or
+   denies (`REJECTED`) through `POST /api/jobs/{id}/approval`; there is no admin screen yet.
 5. **Settle.** A released job is captured, then the cleaner is paid through PayPal Payouts. The
    PayPal webhook marks the job `PAID_OUT`.
 
@@ -59,8 +63,10 @@ BOOKED -> AUTHORIZED -> SUBMITTED -> VERIFIED -+-> RELEASED -> CAPTURED -> PAID_
 
 ## Policy engine
 
-`evaluate()` (`app/policy.py`) applies a set of rules in order and returns `auto_release` or
-`reject`, with every matching reason attached. The mandate (minimum score, auto-release ceiling,
+`evaluate()` (`app/policy.py`) applies seven rules in order and returns `auto_release`,
+`needs_approval` or `reject`, with every matching reason attached. Reject: nothing visible, a
+required item failed, or the score is under the minimum. Needs approval: a required item not
+visible, any other item failed, or the amount is above the auto-release ceiling. The mandate (minimum score, auto-release ceiling,
 required items) is read from the database, with built-in defaults (0.80 and $25.00) when empty.
 
 ## Known gaps
