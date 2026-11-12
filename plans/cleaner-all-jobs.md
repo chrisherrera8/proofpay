@@ -44,15 +44,16 @@ Branch from `main`, for example `feature/cleaner-all-jobs`.
 - `statusCounts(jobs)` returns the chips data (ordered by section order, then status order within it).
 - Unknown future statuses go into a trailing "Other" section so a new backend status never makes jobs vanish.
 
-### 3. Page (`web/src/pages/CleanerJobs.tsx`)
+### 3. Page (`web/src/pages/CleanerJobs.tsx`) — DONE
 - Replace the two `listJobs` calls with the single call; keep the cleaner fetch, 404 handling and redirect logic unchanged.
 - Add the filter chips component (`web/src/components/status-filter.tsx`, small, with a test) and render sections via `groupJobs`.
 - Keep the loading skeleton and the error alert as they are.
 
-### 4. Tests
+### 4. Tests — DONE
 - `lib/job-sections.test.ts`: grouping order, within-section sort (REJECTED before AUTHORIZED, nulls last), empty sections dropped, unknown status lands in "Other", counts.
 - `CleanerJobs.test.tsx`: update `serveJobs` (it currently switches on `status`) to serve one list; rewrite "lists REJECTED before AUTHORIZED" and "sends cleaner_id on both requests" (now a single request with `cleaner_id=c1` and no `status`). New cases: sections render with headings and counts in order; empty sections are hidden; clicking a chip narrows rows and sets `?status=`; `All` restores; `?status=` in the initial URL pre-selects; invalid `?status=` falls back to All; chips only for present statuses; every row links to `/cleaner/:id`, including PAID_OUT.
-- Update `src/test/handlers.ts` default `/jobs` handler only if it assumes the status param.
+- Update `src/test/handlers.ts` default `/jobs` handler only if it assumes the status param. (Checked: it returns `[]` regardless of params, so no change.)
+- Note: tests run under StrictMode, so the request test asserts the params of every `/api/jobs` call rather than a count of exactly one.
 
 ### 5. Verify (per `web/CLAUDE.md`)
 - `npm test` and `npm run build` pass.
