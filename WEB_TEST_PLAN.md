@@ -38,7 +38,7 @@ The goal is one passing smoke test that renders a page, serves it data through M
 - [x] `requests.ts`: a recorder that pushes each request's method, URL, headers and JSON body to an array. Payload tests assert against it.
 - [x] `render.tsx`: `renderRoute(path, { state })`, which wraps `MemoryRouter` + `Routes` (same paths as `main.tsx`) in `StrictMode`. Add a `<LocationProbe>` that prints `pathname` and `state` so redirects can be asserted.
 - [x] `paypal-stub.tsx`: a `vi.mock("@paypal/react-paypal-js")` factory. `PayPalScriptProvider` just renders its children. `PayPalButtons` renders a button and saves its latest props to a module-level `paypal.props` so tests can call `onClick`, `createOrder`, `onApprove`, `onCancel` and `onError`. Version 8.9.2 sends the latest props to the real buttons, so the latest props are the faithful thing to save.
-- [ ] `vi.mock("../resize")` in the CleanerJob tests only, returning `new Blob(["x"], { type: "image/jpeg" })`.
+- [x] `vi.mock("../resize")` in the CleanerJob tests only, returning `new Blob(["x"], { type: "image/jpeg" })`.
 
 **Gotchas to settle now**
 
@@ -217,30 +217,30 @@ This page holds the job's state machine: photos, submit, verification, decision 
 
 **Loading**
 
-- [ ] While loading, the "Loading job" skeleton shows. If `getJob` fails on first load, a full-page error alert shows.
-- [ ] A null `service_date` falls back to `formatWhen(scheduled_at)`.
+- [x] While loading, the "Loading job" skeleton shows. If `getJob` fails on first load, a full-page error alert shows.
+- [x] A null `service_date` falls back to `formatWhen(scheduled_at)`.
 
 **Submit and retry**
 
-- [ ] AUTHORIZED with no photos: Submit is disabled and the hint "Add at least one before and one after photo." shows.
-- [ ] With only before photos, Submit stays disabled. With one before and one after, it's enabled and the hint is gone.
-- [ ] REJECTED is editable too: the same Submit button shows.
-- [ ] While `submitJob` is pending, the button reads "Checking the photos…" and is disabled.
-- [ ] `submitJob` success shows the returned job's status badge.
-- [ ] `submitJob` fails and the refreshed job is now SUBMITTED: the error stays visible **after** the refresh, and "Retry verification" shows.
-- [ ] SUBMITTED: "Retry verification" calls `POST /verify`.
-- [ ] VERIFIED, PENDING_APPROVAL and the payment statuses show neither button.
+- [x] AUTHORIZED with no photos: Submit is disabled and the hint "Add at least one before and one after photo." shows.
+- [x] With only before photos, Submit stays disabled. With one before and one after, it's enabled and the hint is gone.
+- [x] REJECTED is editable too: the same Submit button shows.
+- [x] While `submitJob` is pending, the button reads "Checking the photos…" and is disabled.
+- [x] `submitJob` success shows the returned job's status badge.
+- [x] `submitJob` fails and the refreshed job is now SUBMITTED: the error stays visible **after** the refresh, and "Retry verification" shows.
+- [x] SUBMITTED: "Retry verification" calls `POST /verify`.
+- [x] VERIFIED, PENDING_APPROVAL and the payment statuses show neither button.
 
 **Verification panel**
 
-- [ ] When `overall_pass` is true, the title reads "Checks passed". When false, it reads "Some items need attention".
-- [ ] Each item reads "Passed", "Failed" or "Not visible" (screen-reader text). A not-visible item shows "Not visible in the after photos" instead of its note.
-- [ ] A null score shows "Score –". The model name shows in "Checked by …".
+- [x] When `overall_pass` is true, the title reads "Checks passed". When false, it reads "Some items need attention".
+- [x] Each item reads "Passed", "Failed" or "Not visible" (screen-reader text). A not-visible item shows "Not visible in the after photos" instead of its note.
+- [x] A null score shows "Score –". The model name shows in "Checked by …".
 
 **Decision panel** (one row per case)
 
-- [ ] `auto_release` shows on RELEASED, CAPTURED and PAID_OUT. `needs_approval` shows on PENDING_APPROVAL. `reject` shows on REJECTED. Each shows its title and reasons.
-- [ ] A stale decision shows nothing, for example `auto_release` on PENDING_APPROVAL, or `reject` on AUTHORIZED after a re-clean.
+- [x] `auto_release` shows on RELEASED, CAPTURED and PAID_OUT. `needs_approval` shows on PENDING_APPROVAL. `reject` shows on REJECTED. Each shows its title and reasons.
+- [x] A stale decision shows nothing, for example `auto_release` on PENDING_APPROVAL, or `reject` on AUTHORIZED after a re-clean.
 
 **Payment panel**
 
@@ -253,20 +253,20 @@ This page holds the job's state machine: photos, submit, verification, decision 
 | PAID_OUT | none | the job amount, paid | no |
 | AUTHORIZED | none | no panel | no |
 
-- [ ] Write the table above as `it.each`.
-- [ ] Retry calls `POST /settle`, shows "Retrying…" while pending, and then shows the new status.
+- [x] Write the table above as `it.each`.
+- [x] Retry calls `POST /settle`, shows "Retrying…" while pending, and then shows the new status.
 
 **Photos**
 
-- [ ] The counter reads "n/4". At 4 photos, the add tile is gone.
-- [ ] Uploading 2 files sends 2 `POST /photos?kind=before` and then refreshes.
-- [ ] With 3 existing photos, uploading 3 files sends only 1. Decide first whether dropped files need a message (see Phase 8).
-- [ ] While uploading, the tile reads "Uploading…" and is disabled. Afterwards, the input value is reset.
-- [ ] Partial failure: file 1 is fine and file 2 fails. File 1 still shows after the refresh, and the error alert shows.
-- [ ] Starting a new upload clears a previous error.
-- [ ] Remove calls `DELETE` and refreshes. When the delete fails, the error shows and the page still refreshes.
-- [ ] When the job isn't editable (such as VERIFIED), there are no add or remove controls, and an empty kind reads "No photos."
-- [ ] Photo `src` uses `photoUrl(jobId, id)`, and the alt text reads "Before photo 1".
+- [x] The counter reads "n/4". At 4 photos, the add tile is gone.
+- [x] Uploading 2 files sends 2 `POST /photos?kind=before` and then refreshes.
+- [x] With 3 existing photos, uploading 3 files sends only 1. Decide first whether dropped files need a message (see Phase 8).
+- [x] While uploading, the tile reads "Uploading…" and is disabled. Afterwards, the input value is reset.
+- [x] Partial failure: file 1 is fine and file 2 fails. File 1 still shows after the refresh, and the error alert shows.
+- [x] Starting a new upload clears a previous error.
+- [x] Remove calls `DELETE` and refreshes. When the delete fails, the error shows and the page still refreshes.
+- [x] When the job isn't editable (such as VERIFIED), there are no add or remove controls, and an empty kind reads "No photos."
+- [x] Photo `src` uses `photoUrl(jobId, id)`, and the alt text reads "Before photo 1".
 
 Out of scope: switching straight from one job to another. Today the only way between jobs is through `/cleaner`, which unmounts this page.
 
