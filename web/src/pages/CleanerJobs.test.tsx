@@ -9,6 +9,7 @@ import { API } from "@/test/handlers";
 import { makeCleaner, makeJob } from "@/test/fixtures";
 import { requests, find } from "@/test/requests";
 import { renderRoute } from "@/test/render";
+import { serveJob } from "@/test/job";
 import { server } from "@/test/server";
 import type { Job } from "@/api";
 
@@ -19,6 +20,21 @@ function serveJobs(jobs: Job[]) {
 
 describe("CleanerJobs", () => {
   beforeEach(() => setCleanerId("c1"));
+
+  describe("split view", () => {
+    it("opens a job beside the list, keeping the list and marking the open job", async () => {
+      const a = makeJob({ id: "j1", address: "1 Alpha St" });
+      const b = makeJob({ id: "j2", address: "2 Beta St" });
+      serveJobs([a, b]);
+      serveJob(a);
+      renderRoute("/cleaner");
+      await userEvent.click(await screen.findByRole("link", { name: /1 Alpha St/ }));
+      expect(await screen.findByRole("heading", { level: 1, name: "1 Alpha St" })).toBeInTheDocument();
+      const open = screen.getByRole("link", { name: /1 Alpha St/ });
+      expect(open).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("link", { name: /2 Beta St/ })).not.toHaveAttribute("aria-current");
+    });
+  });
 
   describe("session", () => {
     it("redirects to signup without calling the API when no id is stored", async () => {

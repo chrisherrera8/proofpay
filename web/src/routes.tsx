@@ -13,9 +13,10 @@ export function AppRoutes() {
       <Route path="/" element={<Home />} />
       <Route path="/book" element={<Book />} />
       <Route path="/booked/:jobId" element={<Booked />} />
-      <Route path="/cleaner" element={<CleanerJobs />} />
+      <Route path="/cleaner" element={<CleanerJobs />}>
+        <Route path=":jobId" element={<CleanerJob />} />
+      </Route>
       <Route path="/cleaner/signup" element={<CleanerSignup />} />
-      <Route path="/cleaner/:jobId" element={<CleanerJob />} />
       <Route path="*" element={<Home />} />
     </Routes>
   );
