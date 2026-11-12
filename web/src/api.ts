@@ -129,7 +129,9 @@ export const listJobs = (cleanerId: string, opts: { status?: string; limit?: num
   return request<Job[]>(`/api/jobs?${params}`);
 };
 
-export const signUp = (body: { name: string; paypal_email: string }) =>
+// `known_id` is the cleaner id this browser already holds; `confirmed` says the person confirmed an existing
+// account with this email is theirs. Without either, the API answers 409 when the email is already taken.
+export const signUp = (body: { name: string; paypal_email: string; known_id?: string | null; confirmed?: boolean }) =>
   request<Cleaner>("/api/cleaners", { method: "POST", body: JSON.stringify(body) });
 
 export const listCleaners = (date: string) =>

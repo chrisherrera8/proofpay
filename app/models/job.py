@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric, String, and_, func, select
-from sqlalchemy.orm import Mapped, aliased, mapped_column, relationship
+from sqlalchemy.orm import Mapped, aliased, foreign, mapped_column, relationship
 
 from app.db import Base
 
@@ -98,7 +98,8 @@ def _latest_decision_join():
         .correlate(Job)
         .scalar_subquery()
     )
-    return and_(AuditLog.job_id == Job.id, AuditLog.id == latest_id)
+    # foreign(): audit_log.job_id has no database foreign key (audit rows outlive purged jobs).
+    return and_(foreign(AuditLog.job_id) == Job.id, AuditLog.id == latest_id)
 
 
 class ChecklistItem(Base):

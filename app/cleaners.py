@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import append_audit
 from app.config import DEFAULT_CLEANER_NAME, get_settings
-from app.models import Cleaner, Job, JobStatus, Photo
+from app.models import Approval, ChecklistItem, Cleaner, Job, JobStatus, Payment, Payout, Photo, Verification
 
 log = logging.getLogger(__name__)
 
@@ -54,9 +54,18 @@ def find_by_email(db: Session, email: str) -> Cleaner | None:
     )
 
 
-def sign_up_or_resume(db: Session, name: str, paypal_email: str) -> tuple[Cleaner, bool]:
+class CleanerExists(Exception):
+    """The PayPal email already belongs to an active cleaner and the caller hasn't said it's theirs."""
+
+
+def sign_up_or_resume(
+    db: Session, name: str, paypal_email: str, *, confirmed: bool = False, known_id: uuid.UUID | None = None
+) -> tuple[Cleaner, bool]:
     """(cleaner, created). A PayPal email already held by an active cleaner returns that cleaner (name unchanged)
-    instead of adding a second one; either way its 24-hour clock restarts. Commits."""
+    instead of adding a second one, and its 24-hour clock restarts. That only happens when the caller is the same
+    browser (`known_id` is that cleaner's id) or has confirmed it's them; otherwise CleanerExists is raised and
+    nothing changes, so a failed attempt can't keep someone else's account alive. There are no passwords, so the
+    confirmation is an honest-user check, not security. Commits."""
     # Serialise sign-ups for the same email so two simultaneous requests can't both create one.
     db.execute(select(func.pg_advisory_xact_lock(func.hashtext(paypal_email.strip().lower()))))
     cleaner = find_by_email(db, paypal_email)
@@ -64,6 +73,9 @@ def sign_up_or_resume(db: Session, name: str, paypal_email: str) -> tuple[Cleane
     if created:
         cleaner = Cleaner(name=name, paypal_email=paypal_email)
         db.add(cleaner)
+    elif not (confirmed or known_id == cleaner.id):
+        db.rollback()  # release the lock
+        raise CleanerExists
     else:
         cleaner.last_used_at = func.now()  # an explicit sign-in always counts, whatever touch_cleaner's throttle says
     db.commit()
@@ -139,23 +151,25 @@ def ensure_default_cleaner(db: Session) -> Cleaner | None:
 
 
 def purge_expired(db: Session) -> dict[str, int]:
-    """Scrub expired cleaners: delete their rows and the photos of their jobs, and set jobs.cleaner_id to NULL.
+    """Delete expired cleaners and everything of theirs: their jobs, and those jobs' photos, checks, payments,
+    payouts and checklists. The default cleaner never expires.
 
-    Jobs and audit rows stay, so the hash chain is never touched. Audit rows hold cleaner ids but no names or
-    emails. The default cleaner never expires. Idempotent; writes one count-only audit row only when it deleted
-    something. Commits.
+    Audit rows stay (they're append-only and hold ids and counts, never names or emails), so the hash chain is
+    never touched. Idempotent; writes one count-only audit row only when it deleted something. Commits.
     """
     expired = select(Cleaner.id).where(~Cleaner.is_seed, ~active_cleaner_filter())
-    photos = db.execute(
-        delete(Photo).where(Photo.job_id.in_(select(Job.id).where(Job.cleaner_id.in_(expired))))
-    ).rowcount
-    # RETURNING, so a concurrent purge that got there first is not counted twice. The FK sets jobs.cleaner_id NULL.
+    job_ids = select(Job.id).where(Job.cleaner_id.in_(expired))
+    photos = db.execute(delete(Photo).where(Photo.job_id.in_(job_ids))).rowcount
+    for child in (Verification, Payout, Approval, Payment, ChecklistItem):
+        db.execute(delete(child).where(child.job_id.in_(job_ids)))
+    jobs = db.execute(delete(Job).where(Job.id.in_(job_ids))).rowcount
+    # RETURNING, so a concurrent purge that got there first is not counted twice.
     cleaners = len(db.execute(delete(Cleaner).where(Cleaner.id.in_(expired)).returning(Cleaner.id)).all())
     if cleaners:
         append_audit(db, job_id=None, actor="system", event="CLEANERS_PURGED",
-                     payload={"cleaners": cleaners, "photos": photos})
+                     payload={"cleaners": cleaners, "jobs": jobs, "photos": photos})
     db.commit()
-    return {"cleaners": cleaners, "photos": photos}
+    return {"cleaners": cleaners, "jobs": jobs, "photos": photos}
 
 
 _last_purge = 0.0

@@ -1,4 +1,4 @@
-"""The 24-hour scrub: expired cleaners and their jobs' photos go; jobs and the audit log stay."""
+"""The 24-hour purge: expired cleaners and all their jobs go; the anonymous audit log stays."""
 import datetime as dt
 
 import pytest
@@ -11,7 +11,9 @@ from app.cleaners import purge_expired, purge_if_due
 from app.config import get_settings
 from app.db import get_db
 from app.main import app
-from app.models import AuditLog, Cleaner, Job, Photo
+from decimal import Decimal
+
+from app.models import Approval, AuditLog, ChecklistItem, Cleaner, Job, Payment, Payout, Photo, Verification
 
 UTC = dt.timezone.utc
 DAY = dt.date(2026, 11, 20)
@@ -66,21 +68,41 @@ def photo_count(db, job):
     return len(db.scalars(select(Photo).where(Photo.job_id == job.id)).all())
 
 
-def test_expired_cleaners_and_their_photos_go_but_jobs_stay_scrubbed(db, make_cleaner, booked):
+def test_expired_cleaners_and_their_jobs_go_but_fresh_ones_stay(db, make_cleaner, booked):
     old, fresh = make_cleaner("Old", 25), make_cleaner("Fresh", 23)
     old_job, fresh_job = booked(old), booked(fresh)
-    assert purge_expired(db) == {"cleaners": 1, "photos": 2}
+    old_job_id = old_job.id
+    assert purge_expired(db) == {"cleaners": 1, "jobs": 1, "photos": 2}
     assert names(db) == {"Fresh"}
-    db.refresh(old_job)
-    assert old_job.cleaner_id is None and old_job.service_date == DAY and old_job.status == "AUTHORIZED"
-    assert photo_count(db, old_job) == 0
+    assert db.get(Job, old_job_id) is None
+    assert db.scalars(select(Photo).where(Photo.job_id == old_job_id)).all() == []
     assert photo_count(db, fresh_job) == 2 and fresh_job.cleaner_id == fresh.id
+
+
+def test_everything_attached_to_an_expired_cleaners_job_is_deleted(db, make_cleaner, booked):
+    job = booked(make_cleaner("Old", 25))
+    keep = booked(make_cleaner("Fresh", 1))
+    for j in (job, keep):
+        db.add_all([
+            ChecklistItem(job_id=j.id, label="Kitchen", required=True, position=0),
+            Payment(job_id=j.id, order_id=f"order-{j.id}"),
+            Payout(job_id=j.id, amount=Decimal("10.00")),
+            Verification(job_id=j.id, model="m", results={}),
+            Approval(job_id=j.id),
+        ])
+    db.commit()
+    job_id = job.id
+    purge_expired(db)
+    for model in (ChecklistItem, Payment, Payout, Verification, Approval, Photo):
+        assert db.scalars(select(model).where(model.job_id == job_id)).all() == [], model
+        assert len(db.scalars(select(model).where(model.job_id == keep.id)).all()) >= 1, model
+    assert verify_chain(db) is None
 
 
 def test_default_cleaner_is_never_purged(db, make_cleaner, booked):
     default = make_cleaner("Default", 24 * 90, is_seed=True)
     job = booked(default)
-    assert purge_expired(db) == {"cleaners": 0, "photos": 0}
+    assert purge_expired(db) == {"cleaners": 0, "jobs": 0, "photos": 0}
     assert names(db) == {"Default"} and photo_count(db, job) == 2
 
 
@@ -89,6 +111,7 @@ def test_audit_rows_survive_and_the_chain_still_verifies(db, make_cleaner, booke
     before = db.scalars(select(AuditLog.id)).all()
     purge_expired(db)
     assert set(before) <= set(db.scalars(select(AuditLog.id)).all())
+    assert db.get(Job, job.id) is None  # the job is gone, but its anonymous audit row is not
     assert [r.event for r in db.scalars(select(AuditLog).where(AuditLog.job_id == job.id))] == ["PHOTO_UPLOADED"]
     assert verify_chain(db) is None
 
@@ -97,9 +120,9 @@ def test_one_count_only_audit_row_is_written_and_none_when_nothing_expired(db, m
     booked(make_cleaner("Old", 30)), make_cleaner("Other", 40)
     purge_expired(db)
     row = db.scalars(select(AuditLog).where(AuditLog.event == "CLEANERS_PURGED")).one()
-    assert (row.job_id, row.actor, row.payload) == (None, "system", {"cleaners": 2, "photos": 2})
+    assert (row.job_id, row.actor, row.payload) == (None, "system", {"cleaners": 2, "jobs": 1, "photos": 2})
     assert "old@example.com" not in str(row.payload) and "Old" not in str(row.payload)
-    assert purge_expired(db) == {"cleaners": 0, "photos": 0}  # idempotent
+    assert purge_expired(db) == {"cleaners": 0, "jobs": 0, "photos": 0}  # idempotent
     assert len(db.scalars(select(AuditLog).where(AuditLog.event == "CLEANERS_PURGED")).all()) == 1
     assert verify_chain(db) is None
 
@@ -155,7 +178,7 @@ def token(monkeypatch):
 def test_purge_endpoint_with_the_right_token(client, db, make_cleaner, booked, token):
     booked(make_cleaner("Old", 25))
     r = client.post("/api/maintenance/purge", headers=token)
-    assert r.status_code == 200 and r.json() == {"cleaners": 1, "photos": 2}
+    assert r.status_code == 200 and r.json() == {"cleaners": 1, "jobs": 1, "photos": 2}
     assert names(db) == set()
 
 
