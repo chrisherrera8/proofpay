@@ -55,12 +55,12 @@ Branch from `main`, for example `feature/cleaner-all-jobs`.
 - Update `src/test/handlers.ts` default `/jobs` handler only if it assumes the status param. (Checked: it returns `[]` regardless of params, so no change.)
 - Note: tests run under StrictMode, so the request test asserts the params of every `/api/jobs` call rather than a count of exactly one.
 
-### 5. Verify (per `web/CLAUDE.md`) — web DONE, `pytest` blocked
+### 5. Verify (per `web/CLAUDE.md`) — DONE
 - `npm test` and `npm run build` pass.
 - Playwright against `npm run dev` with `/api/**` mocked, using a fixture with jobs in every status: screenshot `/cleaner` at 390×844 and 1280×800, with `All` and with one chip selected; check the console is clean; tab through the chips and confirm the focus ring. Report which screenshots were checked.
 - Backend tests (`pytest`) need no change; run them once to confirm nothing regressed.
 
-**Results (2026-11-11):** `npm test` 204 passed; `npm run build` passes. Playwright with `/api/**` mocked (10 jobs, every status): checked `/cleaner` at 390×844 and 1280×800, with `All` and with `Awaiting approval` selected (URL became `?status=PENDING_APPROVAL`, only "In review 1" shown). No horizontal overflow at either width; sections, counts and badges render as designed; chips wrap on mobile. Console had no errors, only the two existing React Router future-flag warnings. Tab order reaches the chips and the focused chip shows the 3px ring. A screenshot taken right after a click caught the chip colour transition mid-way; after it settled only the selected chip is pressed. `pytest`: all 412 tests error in setup because the local Postgres is stamped with alembic revision `f8a2d6c4b9e1`, which does not exist in this repo (no backend files differ from `main`). Needs the local test DB reset before it can confirm anything.
+**Results (2026-11-11):** `npm test` 204 passed; `npm run build` passes. Playwright with `/api/**` mocked (10 jobs, every status): checked `/cleaner` at 390×844 and 1280×800, with `All` and with `Awaiting approval` selected (URL became `?status=PENDING_APPROVAL`, only "In review 1" shown). No horizontal overflow at either width; sections, counts and badges render as designed; chips wrap on mobile. Console had no errors, only the two existing React Router future-flag warnings. Tab order reaches the chips and the focused chip shows the 3px ring. A screenshot taken right after a click caught the chip colour transition mid-way; after it settled only the selected chip is pressed. `pytest`: the first run errored in setup because the local test Postgres (tmpfs container) was stamped with an unknown alembic revision `f8a2d6c4b9e1`; after `docker compose down -v && docker compose up -d --wait` all 412 tests pass.
 
 ## Locked decisions
 
