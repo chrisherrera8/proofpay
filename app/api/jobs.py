@@ -11,6 +11,7 @@ from app.cleaners import active_cleaner_filter, booked_on, touch_cleaner
 from app.db import get_db
 from app.models import Approval, ChecklistItem, Cleaner, Job, JobStatus, Payment, Payout, Photo, Verification
 from app.schemas import JobCreate, JobOut
+from app.settlement import PAYOUT_FAILED
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -102,8 +103,15 @@ def get_job(job_id: uuid.UUID, db: Session = Depends(get_db)) -> Job:
 
 
 # Deleting is only allowed where no customer money is held or in flight: BOOKED (never paid) and PAID_OUT
-# (finished and settled). Anywhere between, a PayPal hold or capture would be orphaned.
+# (finished and settled). Anywhere between, a PayPal hold or capture would be orphaned. The one exception is a
+# CAPTURED job whose payout FAILED: nothing is in flight and settlement never retries it, so it is stuck.
 DELETABLE = {JobStatus.BOOKED.value, JobStatus.PAID_OUT.value}
+
+
+def is_deletable(job: Job) -> bool:
+    if job.status in DELETABLE:
+        return True
+    return job.status == JobStatus.CAPTURED.value and job.payout is not None and job.payout.status == PAYOUT_FAILED
 
 
 @router.delete("/{job_id}", status_code=204)
@@ -113,9 +121,9 @@ def delete_job(job_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     job = db.scalar(select(Job).where(Job.id == job_id).with_for_update())
     if job is None:
         raise HTTPException(404, "Job not found")
-    if job.status not in DELETABLE:
+    if not is_deletable(job):
         db.rollback()  # release the lock
-        raise HTTPException(409, f"Job is {job.status}; only unpaid (BOOKED) or finished (PAID_OUT) jobs can be deleted")
+        raise HTTPException(409, f"Job is {job.status}; only unpaid (BOOKED), finished (PAID_OUT) or failed-payout jobs can be deleted")
     status = job.status
     for child in (Photo, Verification, Payout, Approval, Payment, ChecklistItem):
         db.execute(delete(child).where(child.job_id == job_id))
