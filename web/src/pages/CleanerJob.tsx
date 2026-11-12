@@ -219,7 +219,7 @@ export default function CleanerJob() {
   const v = job.verification;
 
   return (
-    <div className="mx-auto w-full max-w-4xl py-8 sm:py-12 lg:py-8">
+    <div className="w-full py-8 sm:py-12 lg:py-8">
       <Link to="/cleaner" className="inline-flex lg:hidden items-center gap-1 rounded text-sm text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
         <ChevronLeft className="size-4" aria-hidden /> All jobs
       </Link>
