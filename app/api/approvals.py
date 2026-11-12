@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.jobs import JOB_LOAD_OPTIONS
+from app.cleaners import touch_cleaner
 from app.db import get_db
 from app.models import Approval, Job, JobStatus
 from app.paypal.client import PayPalClient, get_paypal_client
@@ -50,6 +51,7 @@ def decide_approval(
     if approval is None:  # PENDING_APPROVAL always has one; if not, don't half-apply the decision
         db.rollback()
         raise HTTPException(409, "No pending approval found for this job")
+    touch_cleaner(db, job.cleaner_id)
     approval.status = "APPROVED" if approve else "DENIED"
     approval.decided_by = body.decided_by
     approval.decided_at = datetime.now(timezone.utc)

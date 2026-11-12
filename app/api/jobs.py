@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.audit import append_audit
 from app.checklists import CHECKLIST_TEMPLATES
-from app.cleaners import active_cleaner_filter, booked_on
+from app.cleaners import active_cleaner_filter, booked_on, touch_cleaner
 from app.db import get_db
 from app.models import ChecklistItem, Cleaner, Job, JobStatus
 from app.schemas import JobCreate, JobOut
@@ -26,11 +26,12 @@ def create_job(body: JobCreate, db: Session = Depends(get_db)) -> Job:
         select(Cleaner).where(Cleaner.id == body.cleaner_id, active_cleaner_filter()).with_for_update()
     )
     if cleaner is None:
-        raise HTTPException(404, "Cleaner not found (cleaner data is deleted after 24 hours)")
+        raise HTTPException(404, "Cleaner not found (cleaner data is deleted after 24 hours without use)")
     if db.scalar(select(booked_on(body.service_date)).where(Cleaner.id == cleaner.id)):
         db.rollback()  # release the lock
         raise HTTPException(409, f"{cleaner.name} is already booked on {body.service_date}. Pick another cleaner or date.")
 
+    touch_cleaner(db, cleaner.id)  # committed with the job below
     job = Job(
         status=JobStatus.BOOKED.value,
         customer_name=body.customer_name,
@@ -84,6 +85,8 @@ def list_jobs(
         stmt = stmt.where(Job.status == status.value)
     if cleaner_id:
         stmt = stmt.where(Job.cleaner_id == cleaner_id)
+        touch_cleaner(db, cleaner_id)  # the cleaner is looking at their jobs
+        db.commit()
     return list(db.scalars(stmt))
 
 
