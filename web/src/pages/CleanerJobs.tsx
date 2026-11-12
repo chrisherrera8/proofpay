@@ -111,6 +111,16 @@ export default function CleanerJobs() {
     <div className="flex w-full lg:sticky lg:top-16 lg:h-[calc(100dvh-4rem)]">
       <div className={cn("w-full shrink-0 px-4 py-8 sm:px-6 sm:py-12 lg:w-112 lg:overflow-y-auto lg:border-r lg:py-8", open && "hidden lg:block")}>
       <h1 className="text-3xl font-semibold">{cleaner ? `${cleaner.name}'s jobs` : "Your jobs"}</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Not you?{" "}
+        <Link
+          to="/cleaner/signup"
+          onClick={clearCleanerId}
+          className="rounded underline underline-offset-2 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          Switch cleaner
+        </Link>
+      </p>
       <p className="mt-2 text-muted-foreground">All your jobs. Anything that needs your attention is listed first.</p>
 
       <div className="mt-8">
@@ -146,16 +156,6 @@ export default function CleanerJobs() {
           </div>
         )}
       </div>
-      <p className="mt-8 text-sm text-muted-foreground">
-        Not you?{" "}
-        <Link
-          to="/cleaner/signup"
-          onClick={clearCleanerId}
-          className="rounded underline underline-offset-2 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
-          Switch cleaner
-        </Link>
-      </p>
       </div>
       <div
         className={cn(
