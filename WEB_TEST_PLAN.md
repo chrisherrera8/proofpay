@@ -10,6 +10,7 @@ Work through the phases in order, one per branch or PR. Each phase reuses the he
 - **Phase done when:** `npm test` passes, `npm run build` still passes, and you've watched each new test fail once (break the code or the assertion) so you know it can fail.
 - **Approval before every commit.** When a phase is done, stop and show what changed (files, test results and anything that deviates from the plan). Commit only after the owner approves. Phase 0 was committed before this rule was added.
 - **Query style:** use `getByRole` and `getByLabelText` first. Use `container.querySelector` only for the hidden file input.
+- **Stored cleaner id:** page tests assert through `getCleanerId()`, never the raw `"proofpay.cleanerId"` string, so a key rename can't turn `toBeNull()` into a silent pass. Only `cleaner-session.test.ts` reads `localStorage` directly, using the exported `KEY`.
 - **Check behaviour, not markup:** assert on text, roles and requests sent, never on Tailwind classes.
 - **Bugs found while testing:** note them in Phase 8 instead of fixing them mid-phase, unless the test can't pass without the fix.
 
@@ -54,22 +55,22 @@ Every page relies on these error messages, so this phase goes first. File: `src/
 
 **Errors**
 
-- [ ] Network failure (`HttpResponse.error()`): `ApiError` with "Can't reach the booking server…" and `status` undefined.
-- [ ] Non-OK response with a string `detail`: the message is the detail, and `status` matches.
-- [ ] 422 with a list detail: `"name: too long; email: bad"`, with `"Value error, "` stripped.
-- [ ] 422 list items with no `loc` or `msg`: show `field: invalid`.
-- [ ] `detail` that's an object (not a string or list): the fallback `Something went wrong (400)…`.
-- [ ] 500 with no JSON body: the fallback with `(500)`.
-- [ ] OK response whose body isn't JSON. Today this throws a raw `SyntaxError`, not an `ApiError`. Write the test for the behaviour you want, and log the fix in Phase 8.
+- [x] Network failure (`HttpResponse.error()`): `ApiError` with "Can't reach the booking server…" and `status` undefined.
+- [x] Non-OK response with a string `detail`: the message is the detail, and `status` matches.
+- [x] 422 with a list detail: `"name: too long; email: bad"`, with `"Value error, "` stripped.
+- [x] 422 list items with no `loc` or `msg`: show `field: invalid`.
+- [x] `detail` that's an object (not a string or list): the fallback `Something went wrong (400)…`.
+- [x] 500 with no JSON body: the fallback with `(500)`.
+- [x] OK response whose body isn't JSON. Today this throws a raw `SyntaxError`, not an `ApiError`. Written as `it.fails` until the Phase 8 fix lands; then remove `.fails`.
 
 **Success and requests**
 
-- [ ] 204 from `deletePhoto` resolves to `undefined`.
-- [ ] `listJobs("AUTHORIZED")` has no `cleaner_id`. `listJobs("A B", "x/y")` encodes both values.
-- [ ] `getCleaner("a/b")` and `listCleaners(date)` encode their values.
-- [ ] `createJob` sends `POST` with a JSON body and `Content-Type: application/json`.
-- [ ] `uploadPhoto` sends the raw blob with the blob's own `Content-Type` (`image/jpeg`) and `?kind=before`.
-- [ ] `photoUrl` builds the expected URL.
+- [x] 204 from `deletePhoto` resolves to `undefined`.
+- [x] `listJobs("AUTHORIZED")` has no `cleaner_id`. `listJobs("A B", "x/y")` encodes both values.
+- [x] `getCleaner("a/b")` and `listCleaners(date)` encode their values.
+- [x] `createJob` sends `POST` with a JSON body and `Content-Type: application/json`.
+- [x] `uploadPhoto` sends the raw blob with the blob's own `Content-Type` (`image/jpeg`) and `?kind=before`.
+- [x] `photoUrl` builds the expected URL.
 
 ## Phase 2: Pure helpers and small components
 
@@ -112,26 +113,26 @@ These are fast and need no network. Use table tests (`it.each`) wherever there's
 
 This is the first page test, and it proves out `renderRoute`, the request recorder and the navigation check. Start with the one-line fix, because a test that uses `getByRole("alert")` would hit it.
 
-- [ ] **Fix first:** remove the `<div role="alert">` wrapper at `CleanerSignup.tsx:100`. `ErrorAlert` already renders `role="alert"`, so today there are two nested alerts.
+- [x] **Fix first:** remove the `<div role="alert">` wrapper at `CleanerSignup.tsx:100`. `ErrorAlert` already renders `role="alert"`, so today there are two nested alerts.
 
 **Validation**
 
-- [ ] Submitting an empty form shows "Enter your name." and "Enter your PayPal email.", and records no `POST /api/cleaners`.
-- [ ] Before blur, typing shows no error. After blur, the field's own error shows.
-- [ ] Whitespace-only name and a bad email (`a@b`) each show their message.
+- [x] Submitting an empty form shows "Enter your name." and "Enter your PayPal email.", and records no `POST /api/cleaners`.
+- [x] Before blur, typing shows no error. After blur, the field's own error shows.
+- [x] Whitespace-only name and a bad email (`a@b`) each show their message.
 
 **Submit**
 
-- [ ] A valid submit sends `{ name, paypal_email }` trimmed, stores the id under `proofpay.cleanerId`, and lands on `/cleaner`.
-- [ ] While the request is pending, the button reads "Signing up" and the inputs are disabled. Hold the handler open with a deferred promise to check this.
-- [ ] A 422 failure shows the formatted message in one alert, and the form is enabled again.
-- [ ] Typing after a failure clears the alert.
+- [x] A valid submit sends `{ name, paypal_email }` trimmed, stores the id (asserted via `getCleanerId()`), and lands on `/cleaner`.
+- [x] While the request is pending, the button reads "Signing up" and the inputs are disabled. Hold the handler open with a deferred promise to check this.
+- [x] A 422 failure shows the formatted message in one alert, and the form is enabled again.
+- [x] Typing after a failure clears the alert.
 
 **Banner and demo link**
 
-- [ ] With `state: { expired: true }`, the expired banner shows. Without it, there's no banner.
-- [ ] When `listCleaners` returns a seed cleaner, "Continue as Demo" shows. Clicking it stores the seed id and navigates to `/cleaner`.
-- [ ] No seed cleaner, or a `listCleaners` 500, shows no demo link and no error.
+- [x] With `state: { expired: true }`, the expired banner shows. Without it, there's no banner.
+- [x] When `listCleaners` returns a seed cleaner, "Continue as Demo" shows. Clicking it stores the seed id and navigates to `/cleaner`.
+- [x] No seed cleaner, or a `listCleaners` 500, shows no demo link and no error.
 
 ## Phase 4: CleanerJobs
 
