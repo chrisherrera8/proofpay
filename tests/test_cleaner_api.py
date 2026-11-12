@@ -9,7 +9,7 @@ from app.audit import verify_chain
 from app.config import get_settings
 from app.db import get_db
 from app.main import app
-from app.models import Approval, AuditLog, ChecklistItem, Payment, Payout, Photo, Verification
+from app.models import Approval, AuditLog, ChecklistItem, Cleaner, Payment, Payout, Photo, Verification
 from app.paypal.client import PayPalError, get_paypal_client
 from app.vision import VisionError, get_vision_provider
 from app.vision.base import ItemResult, VisionResult
@@ -69,6 +69,27 @@ def events(db):
 def _post(client, job, kind, data=JPEG):
     return client.post(f"/api/jobs/{job.id}/photos", params={"kind": kind}, content=data,
                        headers={"Content-Type": "image/jpeg"})
+
+
+@pytest.fixture
+def owner(db):
+    """The cleaner whose job list the tests read; GET /api/jobs is always scoped to one cleaner."""
+    c = Cleaner(name="Owner", paypal_email="owner@example.com")
+    db.add(c)
+    db.commit()
+    return c
+
+
+def _own(db, owner, *jobs):
+    for j in jobs:
+        j.cleaner_id = owner.id
+    db.commit()
+
+
+def _list(client, owner, **params):
+    r = client.get("/api/jobs", params={"cleaner_id": str(owner.id), **params})
+    assert r.status_code == 200, r.text
+    return r.json()
 
 
 def _ready(client, make_job, db):
@@ -240,25 +261,26 @@ def test_reclean_after_rejection_resubmits_and_latest_verification_wins(client, 
     assert verify_chain(db) is None
 
 
-def test_list_jobs_includes_latest_verification(client, db, make_job, vision):
+def test_list_jobs_includes_latest_verification(client, db, make_job, vision, owner):
     vision.fail_items = {"Kitchen"}
     verified = _ready(client, make_job, db)
     first = client.post(f"/api/jobs/{verified.id}/submit").json()["verification"]
     waiting = make_job("AUTHORIZED")
+    _own(db, owner, verified, waiting)
 
     # Re-clean (the failed check rejected the job): the list must show the newest verification.
     assert _post(client, verified, "after").status_code == 201
     vision.fail_items = set()
     second = client.post(f"/api/jobs/{verified.id}/submit").json()["verification"]
 
-    rows = {r["id"]: r for r in client.get("/api/jobs").json()}
+    rows = {r["id"]: r for r in _list(client, owner)}
     assert rows[str(verified.id)]["decision"]["outcome"] == "auto_release"  # latest decision, not the reject
     assert rows[str(waiting.id)]["decision"] is None
     assert rows[str(verified.id)]["verification"]["id"] == second["id"] != first["id"]
     assert rows[str(verified.id)]["verification"]["results"]["overall_pass"] is True
     assert rows[str(waiting.id)]["verification"] is None
 
-    by_status = client.get("/api/jobs", params={"status": "CAPTURED"}).json()
+    by_status = _list(client, owner, status="CAPTURED")
     assert [r["id"] for r in by_status] == [str(verified.id)]
     assert by_status[0]["verification"]["id"] == second["id"]
 
@@ -369,22 +391,24 @@ def test_submit_auto_releases_within_rules(client, db, make_job):
     assert verify_chain(db) is None
 
 
-def test_decision_in_detail_and_list_responses(client, db, make_job):
+def test_decision_in_detail_and_list_responses(client, db, make_job, owner):
     job = _ready(client, make_job, db)
+    _own(db, owner, job)
     job.amount = Decimal("30.00")
     db.commit()
     client.post(f"/api/jobs/{job.id}/submit")
     detail = client.get(f"/api/jobs/{job.id}").json()["decision"]
-    listed = {r["id"]: r for r in client.get("/api/jobs").json()}[str(job.id)]["decision"]
+    listed = {r["id"]: r for r in _list(client, owner)}[str(job.id)]["decision"]
     assert detail == listed
     assert detail["outcome"] == "needs_approval"
 
 
-def test_list_decisions_do_not_add_a_query_per_job(client, db, make_job):
+def test_list_decisions_do_not_add_a_query_per_job(client, db, make_job, owner):
     from sqlalchemy import event as sa_event
 
     for _ in range(3):
         j = _ready(client, make_job, db)
+        _own(db, owner, j)
         client.post(f"/api/jobs/{j.id}/submit")
 
     def count_list_queries():
@@ -392,7 +416,7 @@ def test_list_decisions_do_not_add_a_query_per_job(client, db, make_job):
         listener = lambda *a: n.append(1)  # noqa: E731
         sa_event.listen(db.get_bind(), "before_cursor_execute", listener)
         try:
-            assert len(client.get("/api/jobs").json()) >= 3
+            assert len(_list(client, owner)) >= 3
         finally:
             sa_event.remove(db.get_bind(), "before_cursor_execute", listener)
         return len(n)
@@ -400,6 +424,7 @@ def test_list_decisions_do_not_add_a_query_per_job(client, db, make_job):
     three = count_list_queries()
     for _ in range(3):
         j = _ready(client, make_job, db)
+        _own(db, owner, j)
         client.post(f"/api/jobs/{j.id}/submit")
     assert count_list_queries() == three
 
@@ -614,12 +639,13 @@ def test_settle_404_and_409(client, db, make_job):
     assert r.status_code == 409 and "AUTHORIZED" in r.json()["detail"]
 
 
-def test_payout_is_in_detail_and_list(client, db, make_job):
+def test_payout_is_in_detail_and_list(client, db, make_job, owner):
     captured = _ready(client, make_job, db)
     client.post(f"/api/jobs/{captured.id}/submit")
     waiting = make_job("AUTHORIZED")
+    _own(db, owner, captured, waiting)
     detail = client.get(f"/api/jobs/{captured.id}").json()
     assert detail["payout"] == {"amount": "10.00", "status": "PENDING"}
-    rows = {r["id"]: r for r in client.get("/api/jobs").json()}
+    rows = {r["id"]: r for r in _list(client, owner)}
     assert rows[str(captured.id)]["payout"] == {"amount": "10.00", "status": "PENDING"}
     assert rows[str(waiting.id)]["payout"] is None
