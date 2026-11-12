@@ -83,17 +83,38 @@ def test_sign_up_trims_whitespace(client, db):
     assert db.get(Cleaner, r.json()["id"]).paypal_email == "grace@example.com"
 
 
-def test_signing_up_again_with_the_same_email_returns_the_same_cleaner(client, db):
+def test_the_same_email_from_a_new_browser_is_refused_until_confirmed(client, db):
     first = client.post("/api/cleaners", json=SIGNUP)
-    again = client.post("/api/cleaners", json={"name": "Someone Else", "paypal_email": "GRACE@Example.com "})
-    assert first.status_code == 201 and again.status_code == 200
+    other = {"name": "Someone Else", "paypal_email": "GRACE@Example.com "}
+    r = client.post("/api/cleaners", json=other)
+    assert first.status_code == 201 and r.status_code == 409 and "already exists" in r.json()["detail"]
+    again = client.post("/api/cleaners", json={**other, "confirmed": True})
+    assert again.status_code == 200
     assert again.json()["id"] == first.json()["id"] and again.json()["name"] == "Grace Hopper"
     assert db.query(Cleaner).filter(Cleaner.paypal_email.ilike("grace@example.com")).count() == 1
 
 
-def test_sign_up_restarts_the_clock_of_the_existing_cleaner(client, db, make_cleaner):
+def test_the_same_browser_resumes_without_confirming(client):
+    first = client.post("/api/cleaners", json=SIGNUP).json()
+    again = client.post("/api/cleaners", json={**SIGNUP, "known_id": first["id"]})
+    assert again.status_code == 200 and again.json()["id"] == first["id"]
+    # A different cleaner's id is not proof.
+    other = client.post("/api/cleaners", json={**SIGNUP, "known_id": "00000000-0000-0000-0000-000000000000"})
+    assert other.status_code == 409
+
+
+def test_a_refused_sign_up_does_not_restart_the_clock(client, db, make_cleaner):
     c = make_cleaner("Grace", age=dt.timedelta(hours=20))
-    assert client.post("/api/cleaners", json={"name": "Grace", "paypal_email": "grace@example.com"}).status_code == 200
+    before = c.last_used_at
+    assert client.post("/api/cleaners", json={"name": "Grace", "paypal_email": "grace@example.com"}).status_code == 409
+    db.refresh(c)
+    assert c.last_used_at == before
+
+
+def test_confirmed_sign_up_restarts_the_clock_of_the_existing_cleaner(client, db, make_cleaner):
+    c = make_cleaner("Grace", age=dt.timedelta(hours=20))
+    body = {"name": "Grace", "paypal_email": "grace@example.com", "confirmed": True}
+    assert client.post("/api/cleaners", json=body).status_code == 200
     db.refresh(c)
     assert dt.datetime.now(dt.timezone.utc) - c.last_used_at < dt.timedelta(minutes=1)
 

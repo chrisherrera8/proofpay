@@ -43,6 +43,9 @@ class CleanerCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=200)
     paypal_email: str = Field(min_length=3, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    # The cleaner id this browser already holds, and whether the person confirmed an existing account is theirs.
+    known_id: uuid.UUID | None = None
+    confirmed: bool = False
 
 
 class CleanerOut(BaseModel):

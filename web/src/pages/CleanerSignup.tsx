@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/field";
 import { Page } from "@/components/layout";
 import { ErrorAlert } from "@/components/states";
-import { setCleanerId } from "@/lib/cleaner-session";
+import { getCleanerId, setCleanerId } from "@/lib/cleaner-session";
 import { todayLocal } from "@/lib/format";
-import { Cleaner, listCleaners, signUp } from "../api";
+import { ApiError, Cleaner, listCleaners, signUp } from "../api";
 
 // Matches the API's limits (CleanerCreate in app/schemas.py).
 const MAX = { name: 200, email: 320 };
@@ -22,6 +22,7 @@ export default function CleanerSignup() {
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [existing, setExisting] = useState(false);
   const [demo, setDemo] = useState<Cleaner | null>(null);
 
   // The default demo cleaner has no sign-up, so offer it as a way in.
@@ -44,18 +45,24 @@ export default function CleanerSignup() {
     navigate("/cleaner");
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitted(true);
-    if (errors.name || errors.email) return;
+  async function send(confirmed: boolean) {
     setBusy(true);
     setError(null);
     try {
-      enter(await signUp({ name: name.trim(), paypal_email: email.trim() }));
+      enter(await signUp({ name: name.trim(), paypal_email: email.trim(), known_id: getCleanerId(), confirmed }));
     } catch (err) {
-      setError((err as Error).message);
+      // 409: this email already has an account and this browser isn't the one that made it. Ask first.
+      if (err instanceof ApiError && err.status === 409) setExisting(true);
+      else setError((err as Error).message);
       setBusy(false);
     }
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitted(true);
+    if (errors.name || errors.email) return;
+    send(false);
   }
 
   return (
@@ -78,7 +85,7 @@ export default function CleanerSignup() {
           autoComplete="name"
           maxLength={MAX.name}
           value={name}
-          onChange={(e) => { setName(e.target.value); setError(null); }}
+          onChange={(e) => { setName(e.target.value); setError(null); setExisting(false); }}
           onBlur={() => setTouched((t) => ({ ...t, name: true }))}
           error={shown("name")}
           disabled={busy}
@@ -91,16 +98,35 @@ export default function CleanerSignup() {
           maxLength={MAX.email}
           hint="Use a PayPal sandbox account. This is a demo, so no real money moves."
           value={email}
-          onChange={(e) => { setEmail(e.target.value); setError(null); }}
+          onChange={(e) => { setEmail(e.target.value); setError(null); setExisting(false); }}
           onBlur={() => setTouched((t) => ({ ...t, email: true }))}
           error={shown("email")}
           disabled={busy}
         />
         <p className="text-sm text-muted-foreground">
-          Your account stays available for 24 hours after you last use it, then your name and email are deleted.
-          Signing up again with the same PayPal email takes you back to your existing account.
+          Your account stays available for 24 hours after you last use it. After that your name, PayPal email, jobs
+          and payouts are deleted from this demo. Signing up again with the same PayPal email takes you back to
+          your account, and asks you to confirm it's yours if you're on a new browser.
         </p>
         {error && <ErrorAlert message={error} />}
+        {existing && (
+          <div role="alertdialog" aria-labelledby="existing-title" aria-describedby="existing-body"
+            className="grid gap-3 rounded-lg bg-warning p-4 text-warning-foreground">
+            <p id="existing-title" className="font-semibold">This PayPal email already has an account</p>
+            <p id="existing-body" className="text-sm">
+              It was created in another browser and is still active. Only continue if it's yours: you'll see its jobs
+              and its payouts go to this PayPal account.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" disabled={busy} onClick={() => { setExisting(false); send(true); }}>
+                Yes, it's me
+              </Button>
+              <Button type="button" variant="outline" disabled={busy} onClick={() => setExisting(false)}>
+                No, use a different email
+              </Button>
+            </div>
+          </div>
+        )}
         <Button type="submit" size="lg" className="h-11" disabled={busy}>
           {busy && <Loader2 className="animate-spin" aria-hidden />}
           {busy ? "Signing up" : "Sign up"}

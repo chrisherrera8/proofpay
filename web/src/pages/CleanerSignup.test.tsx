@@ -63,8 +63,43 @@ describe("CleanerSignup", () => {
       await fillValid(user);
       await user.click(signUpButton());
       await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent(/^\/cleaner$/));
-      expect(find("POST", "/api/cleaners")[0].body).toEqual({ name: "Ana", paypal_email: "ana@example.com" });
+      expect(find("POST", "/api/cleaners")[0].body).toEqual({ name: "Ana", paypal_email: "ana@example.com", known_id: null, confirmed: false });
       expect(getCleanerId()).toBe("new-id");
+    });
+
+    it("asks before taking over an account that already exists, then resends with confirmed", async () => {
+      let calls = 0;
+      server.use(
+        http.post(`${API}/cleaners`, () =>
+          ++calls === 1
+            ? HttpResponse.json({ detail: "An account with this PayPal email already exists." }, { status: 409 })
+            : HttpResponse.json(makeCleaner({ id: "existing-id" })),
+        ),
+      );
+      const user = userEvent.setup();
+      renderRoute("/cleaner/signup");
+      await fillValid(user);
+      await user.click(signUpButton());
+      const dialog = await screen.findByRole("alertdialog");
+      expect(dialog).toHaveTextContent("already has an account");
+      expect(getCleanerId()).toBeNull();
+      await user.click(screen.getByRole("button", { name: "Yes, it's me" }));
+      await waitFor(() => expect(screen.getByTestId("pathname")).toHaveTextContent(/^\/cleaner$/));
+      expect(find("POST", "/api/cleaners")[1].body).toMatchObject({ confirmed: true });
+      expect(getCleanerId()).toBe("existing-id");
+    });
+
+    it("lets the person back out of an existing account without signing in", async () => {
+      server.use(http.post(`${API}/cleaners`, () => HttpResponse.json({ detail: "exists" }, { status: 409 })));
+      const user = userEvent.setup();
+      renderRoute("/cleaner/signup");
+      await fillValid(user);
+      await user.click(signUpButton());
+      await screen.findByRole("alertdialog");
+      await user.click(screen.getByRole("button", { name: "No, use a different email" }));
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(find("POST", "/api/cleaners")).toHaveLength(1);
+      expect(getCleanerId()).toBeNull();
     });
 
     it("shows a pending state and disables the inputs while the request is open", async () => {
